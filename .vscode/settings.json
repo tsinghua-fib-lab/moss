@@ -1,0 +1,54 @@
+{
+  "editor.tabSize": 2,
+  "doxdocgen.file.copyrightTag": [
+    "@copyright Copyright (c) {year} Tsingroc"
+  ],
+  "cpplint.filters": [
+    "-build/c++11"
+  ],
+  "[python]": {
+    "editor.tabSize": 4,
+  },
+  "C_Cpp.autoAddFileAssociations": false,
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.cStandard": "c17",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.errorSquiggles": "disabled",
+  "C_Cpp.formatting": "clangFormat",
+  "C_Cpp.files.exclude": {
+    "src/lib/**": true,
+    "src/wolong/**": true,
+  },
+  "files.watcherExclude": {
+    "src/lib/**": true,
+    "src/wolong/**": true,
+  },
+  "search.exclude": {
+    "src/lib/**": true,
+    "src/wolong/**": true,
+    "build/**": true,
+  },
+  "todohighlight.keywords": [
+    {
+      "text": "TODO",
+      "color": "#fff",
+      "backgroundColor": "#fdbc3eaa",
+      "overviewRulerColor": "#fdbc3e",
+      "isWholeLine": true,
+    },
+    {
+      "text": "TOWRITE",
+      "color": "#fff",
+      "backgroundColor": "#269745aa",
+      "overviewRulerColor": "#269745",
+      "isWholeLine": true,
+    },
+    {
+      "text": "ATTENTION",
+      "color": "#fff",
+      "backgroundColor": "#f06292aa",
+      "overviewRulerColor": "#f06292",
+      "isWholeLine": true,
+    }
+  ],
+}

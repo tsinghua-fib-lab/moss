@@ -1,0 +1,15 @@
+CompileFlags:
+  Add:
+    - -std=c++17
+    - --cuda-path=/usr/local/cuda
+    - --cuda-gpu-arch=sm_70
+    - -L/usr/local/cuda/lib64
+    - -I/root/simulet-cuda/src
+    - -I/root/simulet-cuda/src/lib/fmt/include
+    - -I/usr/local/cuda/include
+  Remove:
+    - -ccbin*
+    - -rdc*
+    - --options-file*
+    - --generate-code*
+    - -f*
