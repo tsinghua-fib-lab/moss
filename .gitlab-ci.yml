@@ -8,7 +8,7 @@ linux:
   stage: build
   image: python:3.8
   only:
-    - package
+    - $CI_DEFAULT_BRANCH
   # make a docker daemon available for cibuildwheel to use
   services:
     - name: docker:dind
