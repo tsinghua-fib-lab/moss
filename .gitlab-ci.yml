@@ -7,8 +7,9 @@ stages:
 linux:
   stage: build
   image: python:3.8
-  only:
-    - $CI_DEFAULT_BRANCH
+  # run ci on the default branch
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   # make a docker daemon available for cibuildwheel to use
   services:
     - name: docker:dind
