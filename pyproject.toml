@@ -1,15 +1,21 @@
 [build-system]
-requires = ["setuptools>=61.0", "cibuildwheel", "auditwheel"]
+requires = [
+  "setuptools>=61.0",
+  "setuptools-git-versioning<2",
+  "cibuildwheel",
+  "auditwheel",
+]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-moss"
-version = "0.1.0"
 description = "MObility Simulation System"
 authors = [
   { name = "Wenxuan Ao", email = "aowx21@outlook.com" },
   { name = "Jun Zhang", email = "zhangjun990222@gmail.com" },
 ]
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.8"
 dependencies = [
   "shapely>=2",
@@ -21,6 +27,15 @@ dependencies = [
   "igraph",
   "tqdm",
 ]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://moss.fiblab.net"
+Repository = "https://github.com/tsinghua-fib-lab/moss.git"
+Issues = "https://github.com/tsinghua-fib-lab/moss/issues"
+
+[tool.setuptools_git_versioning]
+enable = true
 
 [tool.setuptools.packages.find]
 where = [
