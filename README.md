@@ -20,7 +20,7 @@ Website: https://moss.fiblab.net
 ### Prerequisites
 
 - Linux
-- CUDA 11.x / CUDA 12.x
+- ~~CUDA 11.x~~ / CUDA 12.x
 - Python >= 3.8
 
 ### Install
