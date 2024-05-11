@@ -1,20 +1,15 @@
 [submodule "proto"]
 	path = protos
-	url = git@github.com:tsinghua-fib-lab/cityproto.git
-  branch = v1.31.1
+	url = https://github.com:tsinghua-fib-lab/cityproto.git
 [submodule "src/lib/fmt"]
 	path = src/lib/fmt
-	url = git@github.com:fmtlib/fmt.git
-  branch = 10.2.1
+	url = https://github.com/fmtlib/fmt.git
 [submodule "src/lib/yaml-cpp"]
 	path = src/lib/yaml-cpp
-	url = git@github.com:jbeder/yaml-cpp.git
-  branch = 0.8.0
+	url = https://github.com/jbeder/yaml-cpp.git
 [submodule "src/lib/argparse"]
 	path = src/lib/argparse
-	url = git@github.com:p-ranav/argparse.git
-	branch = v3.0
+	url = https://github.com/p-ranav/argparse.git
 [submodule "src/lib/pybind11"]
 	path = src/lib/pybind11
-	url = git@github.com:pybind/pybind11.git
-	branch = v2.12
+	url = https://github.com/pybind/pybind11.git
