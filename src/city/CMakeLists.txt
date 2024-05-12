@@ -1,5 +1,4 @@
 find_package(protobuf CONFIG REQUIRED)
-find_package(gRPC CONFIG REQUIRED)
 
 file(GLOB proto_files
   agent/v2/*.pb.h
@@ -30,7 +29,7 @@ ENDFOREACH()
 add_library(city ${TOTAL_PROTO_SRCS})
 target_link_libraries(city
   protobuf::libprotobuf
-  gRPC::grpc++
+  grpc++
 )
 
 # message(A ${CMAKE_SOURCE_DIR})
