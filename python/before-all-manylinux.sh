@@ -14,5 +14,5 @@ yum install --setopt=obsoletes=0 -y \
     cuda-nvtx-12-4
 ln -s cuda-12.4 /usr/local/cuda
 
-rm -r /project/build
-mkdir /project/build
+rm -r /project/build || true
+mkdir -p /project/build
