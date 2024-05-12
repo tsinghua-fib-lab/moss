@@ -9,6 +9,10 @@
 name: Upload Python Package
 
 on:
+  # for test
+  push:
+    branches:
+      - main
   release:
     types: [published]
 
@@ -17,11 +21,8 @@ permissions:
 
 jobs:
   deploy:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
+    name: Build wheels
+    runs-on: self-hosted
     # Specifying a GitHub environment is optional, but strongly encouraged
     environment: release
     permissions:
