@@ -22,7 +22,7 @@ permissions:
 jobs:
   deploy:
     name: Build wheels
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     # Specifying a GitHub environment is optional, but strongly encouraged
     environment: release
     permissions:

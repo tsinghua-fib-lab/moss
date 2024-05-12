@@ -1,5 +1,4 @@
 import os
-import re
 import subprocess
 import sys
 
@@ -23,18 +22,13 @@ class CMakeBuild(build_ext):
                 + ", ".join(e.name for e in self.extensions)
             )
 
-        if sys.platform.startswith("win"):
-            cmake_version = re.match(r"version\s*([\d.]+)", out.decode()).group(1)
-            if int(cmake_version.split(".")[0]) < 3:
-                raise RuntimeError("CMake >= 3.0.0 is required on Windows")
-
         for ext in self.extensions:
             self.build_extension(ext)
 
     def build_extension(self, ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = [
-            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + os.path.join(extdir, ext.name),
             "-DPYTHON_EXECUTABLE=" + sys.executable,
         ]
 
@@ -72,7 +66,6 @@ class CMakeBuild(build_ext):
             ["cmake", "--build", ".", "--target", "_simulet"] + build_args,
             cwd=self.build_temp,
         )
-
 
 setup(
     ext_modules=[CMakeExtension("moss")],

@@ -1,4 +1,6 @@
 # Custom
+*.egg-info
+dist/
 .venv/
 wheelhouse/
 
