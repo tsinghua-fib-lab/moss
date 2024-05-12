@@ -7,7 +7,6 @@
     "streetsidesoftware.code-spell-checker",
     "twxs.cmake",
     "wayou.vscode-todo-highlight",
-    "nvidia.nsight-vscode-edition",
-    "llvm-vs-code-extensions.vscode-clangd"
+    "nvidia.nsight-vscode-edition"
   ]
 }

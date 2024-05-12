@@ -51,4 +51,7 @@
       "isWholeLine": true,
     }
   ],
+  "cmake.configureOnOpen": true,
+  "C_Cpp.intelliSenseEngineFallback": "enabled",
+  "C_Cpp.intelliSenseEngine": "default",
 }

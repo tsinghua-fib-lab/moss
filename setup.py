@@ -62,9 +62,6 @@ class CMakeBuild(build_ext):
             env["PATH"] = cuda_bin_path + ":" + env["PATH"]
         else:
             env["PATH"] = cuda_bin_path
-        # clean the directory
-        if os.path.exists(self.build_temp):
-            subprocess.check_call(["rm", "-r", self.build_temp])
         # build the extension
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)

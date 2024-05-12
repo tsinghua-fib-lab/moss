@@ -14,13 +14,5 @@ yum install --setopt=obsoletes=0 -y \
     cuda-nvtx-12-4
 ln -s cuda-12.4 /usr/local/cuda
 
-# # Install gRPC
-# wget -O grpc.src.tar.gz http://tsingroc-private-binary.oss-cn-beijing.aliyuncs.com/grpc1.49.2.src.tar.gz
-# tar -xzf grpc.src.tar.gz
-# cd grpc
-# mkdir -p "cmake/build"
-# cd "cmake/build"
-# cmake ../.. -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF
-# make -j && make -j install && ldconfig && cd ../../
-# cd .. && rm -r grpc
-# rm grpc.src.tar.gz
+rm -r /project/build
+mkdir /project/build
