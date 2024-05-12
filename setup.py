@@ -69,7 +69,8 @@ class CMakeBuild(build_ext):
             ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env
         )
         subprocess.check_call(
-            ["cmake", "--build", "."] + build_args, cwd=self.build_temp
+            ["cmake", "--build", ".", "--target", "_simulet"] + build_args,
+            cwd=self.build_temp,
         )
 
 
