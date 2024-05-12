@@ -11,13 +11,7 @@
 
 find_package(CUDAToolkit)
 
-add_compile_options(-fPIC)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
-
-add_subdirectory(lib/argparse)
-add_subdirectory(lib/fmt)
-add_subdirectory(lib/yaml-cpp)
-add_subdirectory(city)
 
 execute_process(
   COMMAND bash -c "date +%y%m%d.%H%M%S.%N"
@@ -56,20 +50,16 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   target_compile_options(cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
 endif()
 
+target_include_directories(cuda PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(cuda
-  PRIVATE city CUDA::nvToolsExt
+  PRIVATE cityproto
+  PRIVATE CUDA::nvToolsExt
   PRIVATE argparse
   PRIVATE fmt
   PRIVATE yaml-cpp
 )
-target_include_directories(cuda
-  PRIVATE lib/argparse/include
-  PRIVATE lib/fmt/include
-  PRIVATE lib/yaml-cpp/include
-)
 target_compile_definitions(cuda PRIVATE VERSION="build.${DATE}")
 
-add_subdirectory(lib/pybind11)
 pybind11_add_module(_simulet
   python_api.cu
   containers/vector.cu
@@ -102,10 +92,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 target_link_libraries(_simulet
-  PRIVATE city CUDA::nvToolsExt
+  PRIVATE cityproto
+  PRIVATE CUDA::nvToolsExt
   PRIVATE fmt
 )
-target_include_directories(_simulet
-  PRIVATE lib/fmt/include
-)
 target_compile_definitions(_simulet PRIVATE VERSION="build.${DATE}")
+target_include_directories(_simulet PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
