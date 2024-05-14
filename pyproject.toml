@@ -1,0 +1,46 @@
+[build-system]
+requires = [
+  "setuptools>=61.0",
+  "cibuildwheel",
+  "auditwheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-moss"
+version = "0.2.0"
+description = "MObility Simulation System"
+authors = [
+  { name = "Wenxuan Ao", email = "aowx21@outlook.com" },
+  { name = "Jun Zhang", email = "zhangjun990222@gmail.com" },
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+dependencies = [
+  "shapely>=2",
+  "protobuf>=3.20,<5",
+  "grpcio",
+  "grpcio-tools",
+  "numpy>=1.20",
+  "pycityproto==1.13.1",
+  "igraph",
+  "tqdm",
+]
+
+[project.urls]
+Homepage = "https://moss.fiblab.net"
+Repository = "https://github.com/tsinghua-fib-lab/moss.git"
+Issues = "https://github.com/tsinghua-fib-lab/moss/issues"
+
+[tool.setuptools.packages.find]
+where = [
+  "python/src",
+] # list of folders that contain the packages (["."] by default)
+
+[tool.cibuildwheel]
+build = "cp3*manylinux_x86_64"
+
+[tool.cibuildwheel.linux]
+before-all = "./python/before-all-manylinux.sh"
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"

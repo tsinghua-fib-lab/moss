@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "eamodio.gitlens",
+    "editorconfig.editorconfig",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.cpptools",
+    "streetsidesoftware.code-spell-checker",
+    "twxs.cmake",
+    "wayou.vscode-todo-highlight",
+    "nvidia.nsight-vscode-edition"
+  ]
+}

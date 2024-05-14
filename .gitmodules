@@ -1,0 +1,3 @@
+[submodule "proto"]
+	path = protos
+	url = https://github.com/tsinghua-fib-lab/cityproto.git
