@@ -42,7 +42,7 @@ class Lane:
         self.parent_junction: Junction = None
 
     def __repr__(self):
-        return f'<Lane {self.id} at L[{self.index}] in P[{self.parent}]>'
+        return f"<Lane {self.id} at L[{self.index}] in P[{self.parent}]>"
 
 
 class Road:
@@ -53,7 +53,7 @@ class Road:
         self.lanes: List[Lane] = pb.lane_ids
 
     def __repr__(self):
-        return f'<Road {self.id} at R[{self.index}]>'
+        return f"<Road {self.id} at R[{self.index}]>"
 
 
 class RoadPair:
@@ -90,10 +90,12 @@ class Junction:
         self.index: int = None
         self.lanes: List[Lane] = pb.lane_ids
         self.road_pairs: List[RoadPair] = None
-        self.tl: TrafficLight = TrafficLight(pb.fixed_program) if pb.has_fixed_program else None
+        self.tl: TrafficLight = (
+            TrafficLight(pb.fixed_program) if pb.fixed_program.phases else None
+        )
 
     def __repr__(self):
-        return f'<Junction {self.id} at J[{self.index}]>'
+        return f"<Junction {self.id} at J[{self.index}]>"
 
 
 class LanePosition:
@@ -110,13 +112,13 @@ class Aoi:
         self.driving_positions = [LanePosition(i) for i in pb.driving_positions]
 
     def __repr__(self):
-        return f'<Aoi {self.id}>'
+        return f"<Aoi {self.id}>"
 
 
 class Map:
     def __init__(self, map_file):
         self.pb = m = PbMap.Map()
-        m.ParseFromString(open(map_file, 'rb').read())
+        m.ParseFromString(open(map_file, "rb").read())
         self.lanes = [Lane(i) for i in m.lanes]
         self.roads = [Road(i) for i in m.roads]
         self.junctions = [Junction(i) for i in m.junctions]
@@ -160,14 +162,24 @@ class Map:
             for i in out_roads:
                 r = self.road_map[i]
                 ang = r.lanes[0].geom.angle_in
-                a = min(pairs, key=lambda x: abs((ang-x) % (2*PI)-PI))
+                a = min(pairs, key=lambda x: abs((ang - x) % (2 * PI) - PI))
                 pairs[a].append(r)
             assert all(len(i) == 2 for i in pairs.values())
-            ang = min(pairs, key=lambda x: abs((x+PI) % (2*PI)-PI))
-            pairs = sorted(pairs.items(), key=lambda x: (x[0]-ang) % (2*PI))
+            ang = min(pairs, key=lambda x: abs((x + PI) % (2 * PI) - PI))
+            pairs = sorted(pairs.items(), key=lambda x: (x[0] - ang) % (2 * PI))
             jc.road_pairs = [RoadPair(*i[1]) for i in pairs]
             for i in range(4):
-                assert abs((jc.road_pairs[(i+1) % 4].in_road.lanes[0].geom.angle_out-jc.road_pairs[i].in_road.lanes[0].geom.angle_out) % (2*PI)-PI/2) < PI/8
+                assert (
+                    abs(
+                        (
+                            jc.road_pairs[(i + 1) % 4].in_road.lanes[0].geom.angle_out
+                            - jc.road_pairs[i].in_road.lanes[0].geom.angle_out
+                        )
+                        % (2 * PI)
+                        - PI / 2
+                    )
+                    < PI / 8
+                )
 
     def save(self, map_file):
         for x, y in [
