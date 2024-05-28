@@ -38,13 +38,12 @@ class Engine {
 
  public:
   Engine(const std::string& map_file, const std::string& agent_file,
-         uint start_step, uint total_step, float step_interval, int seed,
-         int verbose_level, int agent_limit, bool disable_aoi_out_control,
-         bool disable_junction, int junction_blocking_count,
-         float junction_yellow_time, float phase_pressure_coeff,
-         uint lane_change_algorithm, float mobil_lc_forbidden_distance,
-         uint lane_veh_add_buffer_size, uint lane_veh_remove_buffer_size,
-         uint device)
+         uint start_step, float step_interval, int seed, int verbose_level,
+         int agent_limit, bool disable_aoi_out_control, bool disable_junction,
+         int junction_blocking_count, float junction_yellow_time,
+         float phase_pressure_coeff, uint lane_change_algorithm,
+         float mobil_lc_forbidden_distance, uint lane_veh_add_buffer_size,
+         uint lane_veh_remove_buffer_size, uint device)
       : S() {
     S.is_python_api = true;
     S.Init({.map_file = map_file,
@@ -54,7 +53,7 @@ class Engine {
             .output_type = "disable",
             .road_status_interval = 300,
             .start_step = start_step,
-            .total_step = total_step,
+            .total_step = 1 << 30,
             .step_interval = step_interval,
             .routing_url = "",
             .pre_routing = false,
@@ -619,7 +618,6 @@ class Engine {
     return out;
   }
   void next_step(uint n) {
-    n = std::min(n, S.config.start_step + S.config.total_step - S.step);
     // 中间的步骤就没有必要更新输出，节省时间
     S.enable_api_output = false;
     for (int i = 1; i < n; ++i) {
@@ -628,9 +626,6 @@ class Engine {
     if (n) {
       S.enable_api_output = true;
       S.Step();
-    }
-    if (S.step == S.config.start_step + S.config.total_step) {
-      S.Stop();
     }
   }
   auto save() { return S.Save(); }
@@ -647,15 +642,15 @@ int get_device() {
 PYBIND11_MODULE(_simulet, m) {
   py::class_<Engine>(m, "Engine")
       .def_readonly_static("__version__", &VER)
-      .def(py::init<const std::string&, const std::string&, uint, uint, float,
-                    int, int, int, bool, bool, int, float, float, uint, float,
-                    uint, uint, uint>(),
-           "map_file"_a, "agent_file"_a, "start_step"_a, "total_step"_a,
-           "step_interval"_a = 1, "seed"_a = 43, "verbose_level"_a = 0,
-           "agent_limit"_a = -1, "disable_aoi_out_control"_a = false,
-           "disable_junction"_a = false, "junction_blocking_count"_a = -1,
-           "junction_yellow_time"_a = 3, "phase_pressure_coeff"_a = 1.5,
-           "lane_change"_a = 1, "mobil_lc_forbidden_distance"_a = 15,
+      .def(py::init<const std::string&, const std::string&, uint, float, int,
+                    int, int, bool, bool, int, float, float, uint, float, uint,
+                    uint, uint>(),
+           "map_file"_a, "agent_file"_a, "start_step"_a, "step_interval"_a = 1,
+           "seed"_a = 43, "verbose_level"_a = 0, "agent_limit"_a = -1,
+           "disable_aoi_out_control"_a = false, "disable_junction"_a = false,
+           "junction_blocking_count"_a = -1, "junction_yellow_time"_a = 3,
+           "phase_pressure_coeff"_a = 1.5, "lane_change"_a = 1,
+           "mobil_lc_forbidden_distance"_a = 15,
            "lane_veh_add_buffer_size"_a = 300,
            "lane_veh_remove_buffer_size"_a = 300, "device"_a = 0, no_gil())
       .def("next_step", &Engine::next_step, "n"_a = 1, no_gil())

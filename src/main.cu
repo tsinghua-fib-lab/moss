@@ -56,8 +56,9 @@ int main(int argc, char** argv) {
       .phase_pressure_coeff = cfg["phase_pressure_coeff"].as<float>(),
       .lane_change_algorithm = (uint)cfg["lane_change_algorithm"].as<int>(),
       .mobil_lc_forbidden_distance = 15,
-      .lane_veh_add_buffer_size = 300,
-      .lane_veh_remove_buffer_size = 300,
+      .lane_veh_add_buffer_size = (uint)cfg["lane_add_buffer_size"].as<int>(),
+      .lane_veh_remove_buffer_size =
+          (uint)cfg["lane_remove_buffer_size"].as<int>(),
       .device = (uint)cfg["device"].as<int>(),
   });
   t_init = Time() - t_init;

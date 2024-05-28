@@ -130,7 +130,6 @@ class Engine:
         agent_file: str,
         id_file: str = "",
         start_step: int = 0,
-        total_step: int = 0,  # 只有在需要写输出文件时需要填写
         step_interval: float = 1,
         seed: int = 43,
         verbose_level=Verbosity.NO_OUTPUT,
@@ -157,7 +156,6 @@ class Engine:
             map_file,
             agent_file,
             start_step,
-            total_step,
             step_interval,
             seed,
             verbose_level.value,
@@ -228,7 +226,6 @@ class Engine:
             agent_file=output_path + "/_simulet_agent.bin",
             id_file=output_path + "/_simulet_id.bin",
             start_step=0,
-            total_step=1 << 30,
             step_interval=cityflow_config["interval"],
             seed=cityflow_config["seed"],
             verbose=False,
