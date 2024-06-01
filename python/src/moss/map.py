@@ -75,12 +75,18 @@ class LightPhase:
         self.duration: float = pb.duration
         self.states: List[LightState] = [LightState(i) for i in pb.states]
 
+    def __repr__(self):
+        return f'<LightPhase T={self.duration:.1f} S='+''.join(i.name[0] for i in self.states)+'>'
+
 
 class TrafficLight:
     def __init__(self, pb):
         self.pb = pb
         self.junction_id: int = pb.junction_id
         self.phases: List[LightPhase] = [LightPhase(i) for i in pb.phases]
+
+    def __repr__(self):
+        return f'<TrafficLight for J[{self.junction_id}] with {len(self.phases)} phases>'
 
 
 class Junction:
@@ -103,6 +109,9 @@ class LanePosition:
         self.pb = pb
         self.id: int = pb.lane_id
         self.s: float = pb.s
+
+    def __repr__(self):
+        return f'<LanePosition at L[{self.id}] {self.s:.3f}]>'
 
 
 class Aoi:
@@ -192,3 +201,6 @@ class Map:
             for i in y:
                 x.append(i.pb)
         save_pb(self.pb, map_file)
+
+    def __repr__(self):
+        return f'<Map with {len(self.lanes)} lanes {len(self.roads)} roads {len(self.junctions)} junctions {len(self.aois)} aois>'

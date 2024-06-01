@@ -124,7 +124,9 @@ void Simulet::Init(const Config& config_) {
   output.Y_MIN = config.y_min;
   output.X_MAX = config.x_max;
   output.Y_MAX = config.y_max;
-  road.k_status = exp(-config.step_interval / config.road_status_interval);
+  road.k_status = config.speed_stat_interval <= 0
+                      ? 0
+                      : exp(-config.step_interval / config.speed_stat_interval);
 
   // 读入数据文件
   PbMap map;
@@ -187,6 +189,7 @@ void Simulet::Init(const Config& config_) {
       routing.Init(this, config.routing_url, config.n_workers);
       mem->PrintUsage();
     }
+    lane.InitSizes(this);
     Info("+ Person");
     person.Init(this, agents, config.agent_limit);
     Info("P<", person.g_prepare, ",", person.b_prepare, ">");

@@ -1,18 +1,21 @@
 #include <cassert>
+#include <stdexcept>
 #include "entity/person/person.cuh"
 #include "entity/road/road.cuh"
+#include "fmt/core.h"
+#include "simulet.cuh"
 
 namespace simulet {
 
 // 计算指定lane到路由许可车道范围的差距
-__device__ int LcOffset(const Person& p, const Lane* l) {
+__device__ __host__ int LcOffset(const Person& p, const Lane* l) {
   return l < p.route_l1    ? l - p.route_l1
          : l >= p.route_l2 ? l - p.route_l2 + 1
                            : 0;
 }
 
 // 将给定车道转换为路由中的车道
-__device__ Lane* ToRouteLane(const Person& p, Lane* l) {
+__device__ __host__ Lane* ToRouteLane(const Person& p, Lane* l) {
   assert(l->parent_id == p.route.veh->route[p.route_index]);
   return l < p.route_l1 ? p.route_l1 : l >= p.route_l2 ? p.route_l2 - 1 : l;
 }
@@ -37,7 +40,7 @@ __device__ bool NextRoute(Person& p) {
 }
 
 // 更新路由许可车道范围
-__device__ void Person::UpdateLaneRange() {
+__device__ __host__ void Person::UpdateLaneRange() {
   // TODO: 现在这个函数只在每次进入道路时才调用
   // 真实情况是，动态车道会在离路口一定距离的位置放置指示牌，车辆在到达指示牌前应该始终检查
   if (route_index + 1 == route.veh->route.size) {
@@ -56,12 +59,17 @@ __device__ void Person::UpdateLaneRange() {
         break;
       }
     }
+#ifdef __CUDA_ARCH__
     ASSERT(found);
+#else
+    throw std::runtime_error(
+        fmt::format("Cannot find lane from Road[{}] to Road[{}]", r.id, nr));
+#endif
   }
 }
 
 // 更新next_lane
-__device__ void Person::UpdateNextLane(Lane* lane) {
+__device__ __host__ void Person::UpdateNextLane(Lane* lane) {
   next_lane = nullptr;
   if (route_index + 1 == route.veh->route.size) {
     return;
@@ -126,6 +134,113 @@ const float LC_BRAKING_TOLORENCE = -0.2;
 // 自主变道让后车刹车的加速度阈值相对其最大刹车加速度的偏差
 const float LC_SAFE_BRAKING_BIAS = 1;
 
+void Data::SetRoute(int person_index, std::vector<int> route, int end_lane_id,
+                    float end_s) {
+  // 合法性检查
+  if (route.empty()) {
+    throw std::invalid_argument("Route is empty");
+  }
+  for (auto i : route) {
+    if (S->road.road_map.count(i) == 0) {
+      throw std::invalid_argument(fmt::format("Road {} does not exist", i));
+    }
+  }
+  if (person_index >= persons.size) {
+    throw std::out_of_range("Person index out of range");
+  }
+  auto& p = persons[person_index];
+  if (p.runtime.status == PersonStatus::DRIVING ||
+      p.runtime.status == PersonStatus::TO_INSERT) {
+    if (!p.runtime.lane->parent_is_road) {
+      throw std::runtime_error(
+          "Cannot set vehicle route when it is inside junctions");
+    }
+    if (p.runtime.lane->parent_road->id != route.at(0)) {
+      throw std::invalid_argument(
+          "The first road in the route must be the current road");
+    }
+  } else {
+    throw std::runtime_error(
+        fmt::format("Cannot set vehicle route when the status is {}",
+                    (int)p.runtime.status));
+  }
+  Lane* end_lane;
+  if (end_lane_id == -1) {
+    end_lane = S->road.road_map.at(route[route.size() - 1])->right_driving_lane;
+    if (!end_lane) {
+      throw std::invalid_argument(fmt::format(
+          "Road {} does not have a drivable lane", route[route.size() - 1]));
+    }
+  } else {
+    auto it = S->lane.lane_map.find(end_lane_id);
+    if (it == S->lane.lane_map.end()) {
+      throw std::invalid_argument(
+          fmt::format("Lane {} does not exist", end_lane_id));
+    }
+    end_lane = it->second;
+  }
+  if (end_s < 0) {
+    end_s += end_lane->length;
+  }
+  end_s = max(0, min(end_s, end_lane->length));
+
+  // 更新路由数据
+  auto* v = S->mem->MValueZero<routing::VehicleRoute>();
+  auto& r = v->route;
+  auto n = route.size();
+  r.New(S->mem, n);
+  for (int i = 0; i < n; ++i) {
+    r[i] = route[i];
+  }
+  auto& d = v->distance_to_end;
+  d.New(S->mem, 2 * n - 1);
+  v->end_s = end_s;
+  v->end_lane = end_lane;
+  v->end_lane->GetPosition(v->end_s, v->end_x, v->end_y);
+  for (int i = n - 2; i >= 0; --i) {
+    uint nr = route[i + 1];
+    bool reachable = false;
+    for (auto* l : S->road.road_map.at(route[i])->lanes) {
+      if (l->type == LaneType::LANE_TYPE_DRIVING) {
+        for (auto& ll : l->successors) {
+          if (ll.lane->next_road_id == nr) {
+            d[2 * i + 1] = ll.lane->length;
+            d[2 * i] = l->length;
+            reachable = true;
+            break;
+          }
+        }
+        if (reachable) {
+          break;
+        }
+      }
+    }
+    if (!reachable) {
+      throw std::invalid_argument(fmt::format(
+          "Wrong route: cannot reach Road[{}] from Road[{}]", nr, route[i]));
+    }
+  }
+  double s = v->end_s;
+  d.back() = (float)s;
+  for (int i = d.size - 2; i >= 0; --i) {
+    d[i] = s += d[i];
+  }
+
+  // 更新路由状态
+  p.route.veh = v;
+  p.route_changed = true;
+  if (p.runtime.status == PersonStatus::DRIVING) {
+    p.route_index = 0;
+    p.runtime.distance_to_end =
+        max(0.f, p.route.veh->distance_to_end[0] - p.runtime.s);
+    p.UpdateLaneRange();
+    auto* lane =
+        p.runtime.is_lane_changing ? p.runtime.shadow_lane : p.runtime.lane;
+    p.route_lc_offset = LcOffset(p, lane);
+    p.UpdateNextLane(p.route_lc_offset ? ToRouteLane(p, lane) : lane);
+  }
+}
+
 __device__ float ProjectFromLane(Lane* src_lane, Lane* dest_lane, float s) {
   assert(src_lane->parent_id == dest_lane->parent_id);
   return Clamp(s / src_lane->length * dest_lane->length, 0.f,
@@ -147,14 +262,17 @@ __device__ void ClearLaneChange(PersonState& runtime) {
 
 // 变道完成
 __device__ void FinishLaneChange(Person& p, Lane* lane, float s) {
+  p.runtime.lane = lane;
+  p.runtime.s = s;
+  if (p.route_changed) {
+    return;
+  }
   assert(p.route_lc_offset);
   if (p.route_lc_offset > 0) {
     --p.route_lc_offset;
   } else {
     ++p.route_lc_offset;
   }
-  p.runtime.lane = lane;
-  p.runtime.s = s;
   if (!p.route_lc_offset) {
     p.UpdateNextLane(lane);
   }

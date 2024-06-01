@@ -35,7 +35,7 @@ void Data::Init(Simulet* S, const PbMap& map) {
           r.right_driving_lane = l;
         }
       }
-      r.max_speed = s / r.lanes.size;
+      r.max_speed = r.v_avg = s / r.lanes.size;
     }
     // 填充side_lanes
     Lane* last = nullptr;
@@ -111,8 +111,7 @@ void Data::Save(std::vector<RoadCheckpoint>& state) {
     auto& s = state[i];
     auto& r = roads[i];
     s.max_speed = r.max_speed;
-    s.v_speed_10000 = r.v_speed_10000;
-    s.v_cnt = r.v_cnt;
+    s.v_avg = r.v_avg;
     s.status = r.status;
     s.nrl_a = r.nrl_a;
     s.nrl_b = r.nrl_b;
@@ -125,8 +124,7 @@ void Data::Load(const std::vector<RoadCheckpoint>& state) {
     auto& s = state[i];
     auto& r = roads[i];
     r.max_speed = s.max_speed;
-    r.v_speed_10000 = s.v_speed_10000;
-    r.v_cnt = s.v_cnt;
+    r.v_avg = s.v_avg;
     r.status = s.status;
     r.nrl_a = s.nrl_a;
     r.nrl_b = s.nrl_b;

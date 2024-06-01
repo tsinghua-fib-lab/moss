@@ -11,8 +11,7 @@ struct Simulet;
 
 struct RoadCheckpoint {
   float max_speed;
-  int v_speed_10000;
-  uint v_cnt;
+  float v_avg;
   float status;
   uint nrl_a, nrl_b;
 };
@@ -25,8 +24,7 @@ struct NextRoadLane {
 struct Road {
   uint id, index;
   float max_speed;
-  int v_speed_10000;
-  uint v_cnt;
+  float v_avg;   // 平均车速
   float status;  // 拥堵程度，1~5表示逐渐拥堵
   MArrZ<Lane*> lanes;
   Lane* right_driving_lane;

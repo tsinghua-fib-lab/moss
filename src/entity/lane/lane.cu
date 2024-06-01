@@ -301,7 +301,7 @@ __global__ void Prepare2(Lane* lanes, uint size, bool enable_output) {
   }
 }
 
-__global__ void UpdateLaneStatus(Lane* lanes, uint size) {
+__global__ void UpdateLaneStatistics(Lane* lanes, uint size, float k) {
   uint id = THREAD_ID;
   if (id >= size) {
     return;
@@ -320,25 +320,42 @@ __global__ void UpdateLaneStatus(Lane* lanes, uint size) {
     }
     p = p->next;
   }
-  atomicAdd(&l.parent_road->v_speed_10000, int(v * 10000));
-  atomicAdd(&l.parent_road->v_cnt, n);
+  l.v_avg = k * l.v_avg + (1 - k) * (n ? v / n : l.max_speed);
 }
 
-__global__ void UpdateRoadStatus(Road* roads, uint size, float k,
+__global__ void UpdateRoadStatistics(Road* roads, uint size) {
+  uint id = THREAD_ID;
+  if (id >= size) {
+    return;
+  }
+  auto& r = roads[id];
+  r.v_avg = 0;
+  if (!r.lanes.size) {
+    return;
+  }
+  for (auto* l : r.lanes) {
+    r.v_avg += l->v_avg;
+  }
+  r.v_avg /= r.lanes.size;
+}
+
+__global__ void UpdateRoadOutput(Road* roads, uint size,
                                  MArrZ<char>* road_output) {
   uint id = THREAD_ID;
   if (id >= size) {
     return;
   }
   auto& r = roads[id];
-  r.status = k * r.status +
-             (1 - k) * (r.v_cnt ? 5 - Clamp<float>(r.v_speed_10000 / 2000.f /
-                                                       r.v_cnt / r.max_speed,
-                                                   0, 4)
-                                : 1);
+  r.v_avg = 0;
+  if (!r.lanes.size) {
+    return;
+  }
+  for (auto* l : r.lanes) {
+    r.v_avg += l->v_avg;
+  }
+  r.v_avg /= r.lanes.size;
+  r.status = 5 - Clamp<float>(r.v_avg / r.max_speed * 5, 0, 4);
   (*road_output)[id] = round(r.status);
-  r.v_cnt = 0;
-  r.v_speed_10000 = 0;
 }
 
 __global__ void UpdateTrafficLight(Lane** lanes, uint size,
@@ -359,6 +376,17 @@ __global__ void UpdateTrafficLight(Lane** lanes, uint size,
   }
 }
 
+void Data::InitSizes(Simulet* S) {
+  SetGridBlockSize(UpdateTrafficLight, output_lanes.size, S->sm_count,
+                   g_update_tl, b_update_tl);
+  SetGridBlockSize(UpdateLaneStatistics, lanes.size, S->sm_count, g_update_ls,
+                   b_update_ls);
+  SetGridBlockSize(UpdateRoadStatistics, S->road.roads.size, S->sm_count,
+                   g_update_rs, b_update_rs);
+  SetGridBlockSize(UpdateRoadOutput, S->road.roads.size, S->sm_count,
+                   g_update_ro, b_update_ro);
+}
+
 void Data::Init(Simulet* S, const PbMap& map) {
   this->S = S;
   stream = NewStream();
@@ -366,12 +394,6 @@ void Data::Init(Simulet* S, const PbMap& map) {
   SetGridBlockSize(Prepare0, lanes.size, S->sm_count, g_prepare0, b_prepare0);
   SetGridBlockSize(Prepare1, lanes.size, S->sm_count, g_prepare1, b_prepare1);
   SetGridBlockSize(Prepare2, lanes.size, S->sm_count, g_prepare2, b_prepare2);
-  SetGridBlockSize(UpdateTrafficLight, output_lanes.size, S->sm_count,
-                   g_update_tl, b_update_tl);
-  SetGridBlockSize(UpdateLaneStatus, lanes.size, S->sm_count, g_update_ls,
-                   b_update_ls);
-  SetGridBlockSize(UpdateRoadStatus, S->road.roads.size, S->sm_count,
-                   g_update_rs, b_update_rs);
   // 建立映射
   {
     auto* p = lanes.data;
@@ -389,7 +411,7 @@ void Data::Init(Simulet* S, const PbMap& map) {
     l.next_road_id = unsigned(-1);
     l.type = pb.type();
     l.turn = pb.turn();
-    l.max_speed = pb.max_speed();
+    l.max_speed = l.v_avg = pb.max_speed();
     l.width = pb.max_speed();
     // 初始化容器
     l.ped_add_buffer.mem = S->mem;
@@ -488,15 +510,20 @@ void Data::UpdateAsync() {
   if (!lanes.size) {
     return;
   }
+  if (S->road.k_status > 0 && S->output.option != output::Option::LANE) {
+    UpdateLaneStatistics<<<g_update_ls, b_update_ls, 0, stream>>>(
+        lanes.data, lanes.size, S->road.k_status);
+    UpdateRoadStatistics<<<g_update_rs, b_update_rs, 0, stream>>>(
+        S->road.roads.data, S->road.roads.size);
+  }
   if (S->output.option == output::Option::AGENT) {
     UpdateTrafficLight<<<g_update_tl, b_update_tl, 0, stream>>>(
         output_lanes.data, output_lanes.size, &S->output.M->agent_output);
   } else if (S->output.option == output::Option::LANE) {
-    UpdateLaneStatus<<<g_update_ls, b_update_ls, 0, stream>>>(lanes.data,
-                                                              lanes.size);
-    UpdateRoadStatus<<<g_update_rs, b_update_rs, 0, stream>>>(
-        S->road.roads.data, S->road.roads.size, S->road.k_status,
-        &S->output.M->road_output);
+    UpdateLaneStatistics<<<g_update_ls, b_update_ls, 0, stream>>>(
+        lanes.data, lanes.size, S->road.k_status);
+    UpdateRoadOutput<<<g_update_rs, b_update_rs, 0, stream>>>(
+        S->road.roads.data, S->road.roads.size, &S->output.M->road_output);
   }
 }
 
@@ -512,6 +539,7 @@ void Data::Save(std::vector<LaneCheckpoint>& state) {
     s.veh_cnt = l.veh_cnt;
     s.pressure_in = l.pressure_in;
     s.pressure_out = l.pressure_out;
+    s.v_avg = l.v_avg;
     l.observations.Save(s.observations);
     l.ped_add_buffer.Save(s.ped_add_buffer);
     l.veh_add_buffer.Save(s.veh_add_buffer);
@@ -532,6 +560,7 @@ void Data::Load(const std::vector<LaneCheckpoint>& state) {
     l.veh_cnt = s.veh_cnt;
     l.pressure_in = s.pressure_in;
     l.pressure_out = s.pressure_out;
+    l.v_avg = s.v_avg;
     l.observations.Load(s.observations);
     l.ped_add_buffer.Load(s.ped_add_buffer);
     l.veh_add_buffer.Load(s.veh_add_buffer);

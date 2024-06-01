@@ -19,7 +19,7 @@ struct Config {
   std::string map_file, agent_file;
   uint agent_limit;
   std::string output_file, output_type;
-  float road_status_interval;  // 道路拥堵情况滑动平均长度
+  float speed_stat_interval;  // 车辆平均速度统计间隔；等于0则不启用统计
   uint start_step, total_step;
   float step_interval;
   std::string routing_url;

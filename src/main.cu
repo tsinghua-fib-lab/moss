@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
       .agent_limit = (uint)cfg["agent_limit"].as<int>(),
       .output_file = cfg["output_file"].as<std::string>(),
       .output_type = cfg["output_type"].as<std::string>(),
-      .road_status_interval = cfg["road_status_interval"].as<float>(),
+      .speed_stat_interval = cfg["speed_stat_interval"].as<float>(),
       .start_step = cfg["start_step"].as<uint>(),
       .total_step = cfg["total_step"].as<uint>(),
       .step_interval = cfg["step_interval"].as<float>(),

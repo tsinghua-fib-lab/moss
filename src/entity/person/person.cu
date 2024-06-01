@@ -316,8 +316,10 @@ __global__ void Update(Person* persons, uint size, float global_time,
       }
     } break;
     default:
+      p.route_changed = false;
       return;
   }
+  p.route_changed = false;
   if ((agent_output || enable_api_output) && update_xydir) {
     // 计算(x,y,dir)
     p.runtime.lane->GetPositionDir(p.runtime.s, p.runtime.x, p.runtime.y,
@@ -569,6 +571,8 @@ void Data::Save(std::vector<PersonCheckpoint>& state) {
     s.trip_index = p.trip_index;
     s.loop_counter = p.loop_counter;
     s.start_time_or_last_trip_end_time = p.start_time;
+    s.route = p.route;
+    s.route_changed = p.route_changed;
     s.route_in_junction = p.route_in_junction;
     s.route_index = p.route_index;
     s.route_lc_offset = p.route_lc_offset;
@@ -597,6 +601,8 @@ void Data::Load(const std::vector<PersonCheckpoint>& state) {
     p.trip_index = s.trip_index;
     p.loop_counter = s.loop_counter;
     p.start_time = s.start_time_or_last_trip_end_time;
+    p.route = s.route;
+    p.route_changed = s.route_changed;
     p.route_in_junction = s.route_in_junction;
     p.route_index = s.route_index;
     p.route_lc_offset = s.route_lc_offset;

@@ -100,7 +100,8 @@ struct PersonCheckpoint {
   PersonNode node, shadow_node;
   uint schedule_index, trip_index, loop_counter;
   float start_time_or_last_trip_end_time;
-  // TODO: routing::Response
+  routing::Response route;
+  bool route_changed;
   bool route_in_junction;
   uint route_index;
   int route_lc_offset;
@@ -148,6 +149,7 @@ struct Person {
   bool skip_to_end, is_end;
   // route
   routing::Response route;
+  bool route_changed;  // 被外部更新了路由
   bool route_in_junction;
   // 路由index（注意：路由不含路口内道路）
   uint route_index;
@@ -177,15 +179,12 @@ struct Person {
   __device__ float GetDepartureTime();
   __device__ bool NextTrip(float time);
   // 根据p.runetime.lane更新当前道路许可车道范围
-  __device__ void UpdateLaneRange();
+  __device__ __host__ void UpdateLaneRange();
   // 根据lane更新下一条车道
-  __device__ void UpdateNextLane(Lane*);
+  __device__ __host__ void UpdateNextLane(Lane*);
   // 将车放在车道上并初始化，假定runtime.lane和runtime.s已经设置好
   __device__ void InitVehicleOnLane(float);
 };
-
-// 计算当前车道和目标车道的差
-__device__ int LcOffset(const Person& p, const Lane* l);
 
 namespace person {
 struct MData {
@@ -211,6 +210,9 @@ struct Data {
   void UpdateAsync();
   void Save(std::vector<PersonCheckpoint>&);
   void Load(const std::vector<PersonCheckpoint>&);
+  // 重新设定车辆的路由
+  void SetRoute(int person_index, std::vector<int> route, int end_lane_id,
+                float end_s);
 };
 __device__ void ClearLaneChange(PersonState& runtime);
 __device__ void UpdateVehicle(Person& p, float global_time, float step_interval,

@@ -1,5 +1,4 @@
-import importlib.machinery
-import importlib.util
+import importlib
 import json
 import os
 import pickle
@@ -143,6 +142,7 @@ class Engine:
         mobil_lc_forbidden_distance: float = 15,
         lane_veh_add_buffer_size: int = 300,
         lane_veh_remove_buffer_size: int = 300,
+        speed_stat_interval=0,
         device: int = 0,
     ):
         assert junction_yellow_time >= 0
@@ -152,6 +152,9 @@ class Engine:
             raise RuntimeError(
                 "Cannot create multiple Engines on different device! Use simulet.parallel.ParallelEngine instead."
             )
+        self.speed_stat_interval = speed_stat_interval
+        if speed_stat_interval < 0:
+            raise ValueError("Cannot set speed_stat_interval to be less than 0")
         self._e = _simulet.Engine(
             map_file,
             agent_file,
@@ -169,6 +172,7 @@ class Engine:
             mobil_lc_forbidden_distance,
             lane_veh_add_buffer_size,
             lane_veh_remove_buffer_size,
+            speed_stat_interval,
             device,
         )
         self.map_file = map_file
@@ -371,6 +375,13 @@ class Engine:
         """
         return self._e.get_lane_ids()
 
+    def get_lane_average_vehicle_speed(self, lane_index) -> float:
+        if self.speed_stat_interval == 0:
+            raise RuntimeError(
+                "Please set speed_stat_interval to enable speed statistics"
+            )
+        return self._e.get_lane_average_vehicle_speed(lane_index)
+
     def get_junction_ids(self) -> NDArray[np.int32]:
         """
         Get the ids of the junctions
@@ -413,9 +424,9 @@ class Engine:
         """
         return self._e.get_junction_dynamic_roads()
 
-    def get_road_lane_plans(self, road_id: int) -> List[List[slice]]:
+    def get_road_lane_plans(self, road_index: int) -> List[List[slice]]:
         """
-        Get the dynamic lane plan of the road `road_id`,
+        Get the dynamic lane plan of the road `road_index`,
         represented as list of lane groups:
         ```
         [
@@ -424,8 +435,15 @@ class Engine:
         ```
         """
         return [
-            [slice(a, b) for a, b in i] for i in self._e.get_road_lane_plans(road_id)
+            [slice(a, b) for a, b in i] for i in self._e.get_road_lane_plans(road_index)
         ]
+
+    def get_road_average_vehicle_speed(self, road_index) -> float:
+        if self.speed_stat_interval == 0:
+            raise RuntimeError(
+                "Please set speed_stat_interval to enable speed statistics"
+            )
+        return self._e.get_road_average_vehicle_speed(road_index)
 
     def get_vehicle_lanes(self) -> Union[Dict[str, int], NDArray[np.int32]]:
         """
@@ -531,11 +549,11 @@ class Engine:
         """
         return self._e.get_vehicle_id_positions().reshape(-1, 4)
 
-    def get_road_lane_plan_id(self, road_id: int) -> int:
+    def get_road_lane_plan_index(self, road_index: int) -> int:
         """
-        Get the lane plan of road `road_id`
+        Get the lane plan of road `road_index`
         """
-        return self._e.get_road_lane_plan_id(road_id)
+        return self._e.get_road_lane_plan_index(road_index)
 
     def get_road_vehicle_counts(self) -> NDArray[np.int32]:
         """
@@ -559,115 +577,135 @@ class Engine:
             }
         return self._e.get_road_waiting_vehicle_counts(speed_threshold)
 
-    def set_vehicle_enable(self, vehicle_id: int, enable: bool):
+    def set_vehicle_enable(self, vehicle_index: int, enable: bool):
         """
-        Enable or disable vehicle `vehicle_id`
+        Enable or disable vehicle `vehicle_index`
         """
-        self._e.set_vehicle_enable(vehicle_id, enable)
+        self._e.set_vehicle_enable(vehicle_index, enable)
 
     def set_vehicle_enable_batch(
-        self, vehicle_ids: List[int], enable: Union[bool, List[bool]]
+        self, vehicle_indices: List[int], enable: Union[bool, List[bool]]
     ):
         """
-        Enable or disable vehicle `vehicle_id`
+        Enable or disable vehicles in `vehicle_indices`
         """
         self._e.set_vehicle_enable_batch(
-            vehicle_ids,
-            [enable] * len(vehicle_ids) if isinstance(enable, bool) else enable,
+            vehicle_indices,
+            [enable] * len(vehicle_indices) if isinstance(enable, bool) else enable,
         )
 
-    def set_tl_policy(self, junction_id: int, policy: TlPolicy):
+    def set_tl_policy(self, junction_index: int, policy: TlPolicy):
         """
-        Set the traffic light policy of junction `junction_id` to `policy`
+        Set the traffic light policy of junction `junction_index` to `policy`
         """
-        self._e.set_tl_policy(junction_id, policy.value)
+        self._e.set_tl_policy(junction_index, policy.value)
 
-    def set_tl_policy_batch(self, junction_ids: List[int], policy: TlPolicy):
+    def set_tl_policy_batch(self, junction_indices: List[int], policy: TlPolicy):
         """
-        Set the traffic light policy of all junctions in `junction_ids` to `policy`
+        Set the traffic light policy of all junctions in `junction_indices` to `policy`
         """
-        self._e.set_tl_policy_batch(junction_ids, policy.value)
+        self._e.set_tl_policy_batch(junction_indices, policy.value)
 
-    def set_tl_duration(self, junction_id: int, duration: int):
+    def set_tl_duration(self, junction_index: int, duration: int):
         """
-        Set the traffic light switch duration of junction `junction_id` to `duration`
+        Set the traffic light switch duration of junction `junction_index` to `duration`
 
         NOTE: This is only effective for `TlPolicy.FIXED_TIME` and `TlPolicy.MAX_PRESSURE`.
 
         NOTE: Set duration to `0` to use the predefined duration in the `map_file`
         """
-        self._e.set_tl_duration(junction_id, duration)
+        self._e.set_tl_duration(junction_index, duration)
 
-    def set_tl_duration_batch(self, junction_ids: List[int], duration: int):
+    def set_tl_duration_batch(self, junction_indices: List[int], duration: int):
         """
-        Set the traffic light switch duration of all junctions in `junction_ids` to `duration`
+        Set the traffic light switch duration of all junctions in `junction_indices` to `duration`
 
         NOTE: This is only effective for `TlPolicy.FIXED_TIME` and `TlPolicy.MAX_PRESSURE`
 
         NOTE: Set duration to `0` to use the predefined duration in the `map_file`
         """
-        self._e.set_tl_duration_batch(junction_ids, duration)
+        self._e.set_tl_duration_batch(junction_indices, duration)
 
-    def set_tl_phase(self, junction_id: Union[str, int], phase_id: int):
+    def set_tl_phase(self, junction_index: Union[str, int], phase_index: int):
         """
-        Set the phase of `junction_id` to `phase_id`
+        Set the phase of `junction_index` to `phase_index`
         """
         if self.has_id:
-            junction_id = self.junc2id[junction_id]
-        self._e.set_tl_phase(junction_id, phase_id)
+            junction_index = self.junc2id[junction_index]
+        self._e.set_tl_phase(junction_index, phase_index)
 
-    def set_tl_phase_batch(self, junction_ids: List[int], phase_ids: List[int]):
+    def set_tl_phase_batch(self, junction_indices: List[int], phase_indices: List[int]):
         """
-        Set the phase of `junction_id` to `phase_id` in batch
+        Set the phase of `junction_index` to `phase_index` in batch
         """
-        assert len(junction_ids) == len(phase_ids)
+        assert len(junction_indices) == len(phase_indices)
         if self.has_id:
             raise NotImplementedError
-        self._e.set_tl_phase_batch(junction_ids, phase_ids)
+        self._e.set_tl_phase_batch(junction_indices, phase_indices)
 
-    def set_road_lane_plan(self, road_id: int, plan_id: int):
+    def set_road_lane_plan(self, road_index: int, plan_index: int):
         """
-        Set the lane plan of road `road_id`
+        Set the lane plan of road `road_index`
         """
-        self._e.set_road_lane_plan(road_id, plan_id)
+        self._e.set_road_lane_plan(road_index, plan_index)
 
-    def set_road_lane_plan_batch(self, road_ids: List[int], plan_ids: List[int]):
-        """
-        Set the lane plan of road `road_id`
-        """
-        assert len(road_ids) == len(plan_ids)
-        self._e.set_road_lane_plan_batch(road_ids, plan_ids)
-
-    def set_lane_restriction(self, lane_id: int, flag: bool):
-        """
-        Set the restriction state of lane `lane_id`
-        """
-        self._e.set_lane_restriction(lane_id, flag)
-
-    def set_lane_restriction_batch(self, lane_ids: List[int], flags: List[bool]):
-        """
-        Set the restriction state of lane `lane_id`
-        """
-        assert len(lane_ids) == len(flags)
-        self._e.set_lane_restriction_batch(lane_ids, flags)
-
-    def set_lane_max_speed(self, lane_id: int, max_speed: float):
-        """
-        Set the max_speed of lane `lane_id`
-        """
-        self._e.set_lane_max_speed(lane_id, max_speed)
-
-    def set_lane_max_speed_batch(
-        self, lane_ids: List[int], max_speeds: Union[float, List[float]]
+    def set_road_lane_plan_batch(
+        self, road_indices: List[int], plan_indices: List[int]
     ):
         """
-        Set the max_speed of lane `lane_id`
+        Set the lane plan of road `road_index`
+        """
+        assert len(road_indices) == len(plan_indices)
+        self._e.set_road_lane_plan_batch(road_indices, plan_indices)
+
+    def set_lane_restriction(self, lane_index: int, flag: bool):
+        """
+        Set the restriction state of lane `lane_index`
+        """
+        self._e.set_lane_restriction(lane_index, flag)
+
+    def set_lane_restriction_batch(self, lane_indices: List[int], flags: List[bool]):
+        """
+        Set the restriction state of lane `lane_index`
+        """
+        assert len(lane_indices) == len(flags)
+        self._e.set_lane_restriction_batch(lane_indices, flags)
+
+    def set_lane_max_speed(self, lane_index: int, max_speed: float):
+        """
+        Set the max_speed of lane `lane_index`
+        """
+        self._e.set_lane_max_speed(lane_index, max_speed)
+
+    def set_lane_max_speed_batch(
+        self, lane_indices: List[int], max_speeds: Union[float, List[float]]
+    ):
+        """
+        Set the max_speed of lane `lane_index`
         """
         if hasattr(max_speeds, "__len__"):
-            assert len(lane_ids) == len(max_speeds)
+            assert len(lane_indices) == len(max_speeds)
         else:
-            max_speeds = [max_speeds] * len(lane_ids)
-        self._e.set_lane_max_speed_batch(lane_ids, max_speeds)
+            max_speeds = [max_speeds] * len(lane_indices)
+        self._e.set_lane_max_speed_batch(lane_indices, max_speeds)
+
+    def set_vehicle_route(
+        self,
+        vehicle_index: int,
+        route: List[int],
+        end_lane_id: int = -1,
+        end_s: float = -10,
+    ):
+        """
+        Set the route of vehicle `vehicle_index` to `route` and the end to (`end_lane_id`,`end_s`)
+
+        - If `end_lane_id` is `-1`, then the vehicle will stop at the rightmost drivable lane of the last road
+
+        - `end_s` will be clipped to be within the length of end lane
+
+        - If `end_s<0`, it will be treated as measured from the end of the lane
+        """
+        self._e.set_vehicle_route(vehicle_index, route, end_lane_id, end_s)
 
     def debug_vehicle_info(self) -> NDArray[np.float64]:
         """
@@ -677,7 +715,7 @@ class Engine:
 
     def debug_vehicle_full_info(self, vehicle_id: int) -> Tuple:
         """
-        Get full debug vehicle info
+        Get full debug info for vehicle `vehicle_id`
         """
         return self._e.debug_vehicle_full(vehicle_id)
 

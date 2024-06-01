@@ -44,6 +44,7 @@ struct LaneCheckpoint {
   float light_time;
   uint ped_cnt, veh_cnt;
   float pressure_in, pressure_out;
+  float v_avg;
   std::vector<LaneObservation> observations;
   std::vector<PersonNode*> ped_add_buffer, veh_add_buffer, ped_remove_buffer,
       veh_remove_buffer;
@@ -84,6 +85,7 @@ struct Lane {
   LightState light_state;
   float light_time;
   float pressure_in, pressure_out;
+  float v_avg;  // 平均车速
   uint ped_cnt, veh_cnt;
   // overlap
   MArrZ<Overlap> overlaps;
@@ -106,10 +108,13 @@ struct Data {
   std::unordered_map<uint, Lane*> lane_map;
   cudaStream_t stream;
   Simulet* S;
-  int g_prepare0, g_prepare1, g_prepare2, g_update_tl, g_update_rs, g_update_ls;
-  int b_prepare0, b_prepare1, b_prepare2, b_update_tl, b_update_rs, b_update_ls;
+  int g_prepare0, g_prepare1, g_prepare2, g_update_tl, g_update_rs, g_update_ro,
+      g_update_ls;
+  int b_prepare0, b_prepare1, b_prepare2, b_update_tl, b_update_rs, b_update_ro,
+      b_update_ls;
 
   void Init(Simulet* S, const PbMap&);
+  void InitSizes(Simulet* S);
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<LaneCheckpoint>&);
