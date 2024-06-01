@@ -507,23 +507,25 @@ void Data::PrepareAsync() {
 }
 
 void Data::UpdateAsync() {
-  if (!lanes.size) {
-    return;
-  }
   if (S->road.k_status > 0 && S->output.option != output::Option::LANE) {
-    UpdateLaneStatistics<<<g_update_ls, b_update_ls, 0, stream>>>(
-        lanes.data, lanes.size, S->road.k_status);
-    UpdateRoadStatistics<<<g_update_rs, b_update_rs, 0, stream>>>(
-        S->road.roads.data, S->road.roads.size);
+    if (g_update_ls)
+      UpdateLaneStatistics<<<g_update_ls, b_update_ls, 0, stream>>>(
+          lanes.data, lanes.size, S->road.k_status);
+    if (g_update_rs)
+      UpdateRoadStatistics<<<g_update_rs, b_update_rs, 0, stream>>>(
+          S->road.roads.data, S->road.roads.size);
   }
   if (S->output.option == output::Option::AGENT) {
-    UpdateTrafficLight<<<g_update_tl, b_update_tl, 0, stream>>>(
-        output_lanes.data, output_lanes.size, &S->output.M->agent_output);
+    if (g_update_tl)
+      UpdateTrafficLight<<<g_update_tl, b_update_tl, 0, stream>>>(
+          output_lanes.data, output_lanes.size, &S->output.M->agent_output);
   } else if (S->output.option == output::Option::LANE) {
-    UpdateLaneStatistics<<<g_update_ls, b_update_ls, 0, stream>>>(
-        lanes.data, lanes.size, S->road.k_status);
-    UpdateRoadOutput<<<g_update_rs, b_update_rs, 0, stream>>>(
-        S->road.roads.data, S->road.roads.size, &S->output.M->road_output);
+    if (g_update_ls)
+      UpdateLaneStatistics<<<g_update_ls, b_update_ls, 0, stream>>>(
+          lanes.data, lanes.size, S->road.k_status);
+    if (g_update_rs)
+      UpdateRoadOutput<<<g_update_rs, b_update_rs, 0, stream>>>(
+          S->road.roads.data, S->road.roads.size, &S->output.M->road_output);
   }
 }
 

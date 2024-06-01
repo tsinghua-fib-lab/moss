@@ -59,9 +59,15 @@ __device__ __host__ void Person::UpdateLaneRange() {
         break;
       }
     }
-#ifdef __CUDA_ARCH__
-    ASSERT(found);
-#else
+    if (!found) {
+      printf(RED("[Error] Person[%d] cannot find lane from Road[%d] to "
+                 "Road[%d]\n"),
+             id, r.id, nr);
+      SetError(ErrorCode(ErrorType::ANY, 1));
+      route_l1 = runtime.lane;
+      route_l2 = route_l1 + 1;
+    }
+#ifndef __CUDA_ARCH__
     throw std::runtime_error(
         fmt::format("Cannot find lane from Road[{}] to Road[{}]", r.id, nr));
 #endif
@@ -550,13 +556,14 @@ __device__ void PlanNecessaryLaneChange(Person& p, LaneChangeEnv& env,
     p.UpdateNextLane(env.side_lane);
   }
   if (env.side_front) {
-    auto d = env.side_front->s - env.side_s - env.side_front->self->attr.length;
-    if (d <
-        1 + p.runtime.speed * p.runtime.speed / 2 / -p.attr.max_braking_acc) {
-      p.runtime.speed = 0;
-      p._reason_detail = 0;
-      SetAcc(p, -1e999, AccReason::LANE_CHANGE_HARD_STOP);
-    }
+    // auto d = env.side_front->s - env.side_s -
+    // env.side_front->self->attr.length; if (d <
+    //     1 + p.runtime.speed * p.runtime.speed / 2 / -p.attr.max_braking_acc)
+    //     {
+    //   p.runtime.speed = 0;
+    //   p._reason_detail = 0;
+    //   SetAcc(p, -1e999, AccReason::LANE_CHANGE_HARD_STOP);
+    // }
     //  KraussCarFollowAcc(p, step_interval,
     //                     env.side_front->self->snapshot.speed,
     //                     env.side_front->self->attr.max_braking_acc,
@@ -763,17 +770,18 @@ __device__ void UpdateAction(Person& p, float step_interval,
   // 变道时只考虑目标车道的情况
   if (p.snapshot.is_lane_changing) {
     // 变道撞车情况下强制刹车
-    if (p.shadow_node.front && p.shadow_node.front->s - p.shadow_node.s <
-                                   3 + p.runtime.speed * p.runtime.speed / 2 /
-                                           -p.attr.max_braking_acc) {
-      p.runtime.speed = 0;
-      p.runtime.acc = p.attr.max_braking_acc;
-      p._reason = AccReason::LANE_CHANGE_HARD_STOP;
-      p._reason_detail = 1;
-    } else {
-      PolicyShadowCarFollow(p, step_interval);
-      PolicyShadowLaneAhead(p, step_interval, junction_blocking_count);
-    }
+    // if (p.shadow_node.front && p.shadow_node.front->s - p.shadow_node.s <
+    //                                3 + p.runtime.speed * p.runtime.speed / 2
+    //                                /
+    //                                        -p.attr.max_braking_acc) {
+    //   p.runtime.speed = 0;
+    //   p.runtime.acc = p.attr.max_braking_acc;
+    //   p._reason = AccReason::LANE_CHANGE_HARD_STOP;
+    //   p._reason_detail = 1;
+    // } else {
+    PolicyShadowCarFollow(p, step_interval);
+    PolicyShadowLaneAhead(p, step_interval, junction_blocking_count);
+    // }
   } else {
     PolicyCarFollow(p, step_interval);
     PolicyLaneAhead(p, step_interval, junction_blocking_count);

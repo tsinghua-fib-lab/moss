@@ -13,6 +13,9 @@ void CheckError(const char* file, int lineno) {
   auto type = (ErrorType)(_error & 0xf);
   uint detail = _error >> 4;
   switch (type) {
+    case ErrorType::ANY: {
+      Fatal("Error: Code ", detail, ".\nFile \"", file, "\", line ", lineno);
+    } break;
     case ErrorType::LANE_VEH_ADD_BUFFER_FULL: {
       Fatal("Error: The vehicle add buffer of Lane [", detail,
             "] is full, consider increasing its size.\nFile \"", file,

@@ -3,6 +3,7 @@
 #include <cuda.h>
 
 enum ErrorType {
+  ANY,
   LANE_VEH_ADD_BUFFER_FULL,
   LANE_VEH_REMOVE_BUFFER_FULL,
 };

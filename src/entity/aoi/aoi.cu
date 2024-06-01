@@ -10,6 +10,7 @@
 #include "rpc/routing.cuh"
 #include "simulet.cuh"
 #include "utils/color_print.h"
+#include "utils/debug.cuh"
 #include "utils/macro.h"
 #include "utils/utils.cuh"
 
@@ -144,7 +145,12 @@ __global__ void Update(Aoi* aois, uint size, float global_time,
               break;
             }
           }
-          ASSERT(check);
+          if (!check) {
+            printf(RED("[Error] Person[%d] in Aoi[%d] cannot go to driving "
+                       "lane[%d]\n"),
+                   p->id, a.id, l->id);
+          }
+          SetError(ErrorCode(ErrorType::ANY, 2));
         } else {
           auto* l = r.ped->route[0].lane;
           bool check = false;
@@ -155,7 +161,12 @@ __global__ void Update(Aoi* aois, uint size, float global_time,
               break;
             }
           }
-          ASSERT(check);
+          if (!check) {
+            printf(RED("[Error] Person[%d] in Aoi[%d] cannot go to walking "
+                       "lane[%d]\n"),
+                   p->id, a.id, l->id);
+          }
+          SetError(ErrorCode(ErrorType::ANY, 3));
         }
         p->runtime.status = PersonStatus::CROWD;
       } else {
@@ -211,7 +222,12 @@ __global__ void Update(Aoi* aois, uint size, float global_time,
         break;
       }
     }
-    ASSERT(check);
+    if (!check) {
+      printf(
+          RED("[Error] Person[%d] in Aoi[%d] cannot go to driving lane[%d]\n"),
+          p->id, a.id, l->id);
+    }
+    SetError(ErrorCode(ErrorType::ANY, 4));
     l->ped_add_buffer.Append(&p->node);
   }
   a.ped_for_leaving.Clear();

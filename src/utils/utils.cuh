@@ -5,13 +5,6 @@
 #include <cassert>
 #include "utils/macro.h"
 
-#if NDEBUG
-#define ASSERT(x) \
-  if (!(x)) __trap();
-#else
-#define ASSERT assert
-#endif
-
 // 找到首个不小于target的值的偏移量，返回size表示没找到
 template <typename T>
 __host__ __device__ uint32_t LowerBound(const T* array, uint32_t size,
