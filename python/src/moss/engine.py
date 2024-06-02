@@ -1,4 +1,6 @@
 import importlib
+import importlib.machinery
+import importlib.util
 import json
 import os
 import pickle
@@ -141,7 +143,7 @@ class Engine:
         lane_change: LaneChange = LaneChange.SUMO,
         mobil_lc_forbidden_distance: float = 15,
         lane_veh_add_buffer_size: int = 1000,
-        lane_veh_remove_buffer_size: int = 300,
+        lane_veh_remove_buffer_size: int = 1000,
         speed_stat_interval=0,
         device: int = 0,
     ):
