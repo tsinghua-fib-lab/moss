@@ -64,6 +64,10 @@ __device__ void SortPerson(PersonNode** start, PersonNode** end) {
   }
 }
 
+__device__ bool less(const PersonNode* a, const PersonNode* b) {
+  return a->s < b->s || a->s == b->s && a->index < b->index;
+}
+
 // 合并两个有序链表
 __device__ void MergePersonList(PersonNode*& head, PersonNode* other) {
   if (!head) {
@@ -74,7 +78,7 @@ __device__ void MergePersonList(PersonNode*& head, PersonNode* other) {
     return;
   }
   PersonNode *p, *q, *t;
-  if (head->s < other->s) {
+  if (less(head, other)) {
     p = head;
     q = other;
   } else {
@@ -83,7 +87,7 @@ __device__ void MergePersonList(PersonNode*& head, PersonNode* other) {
     head = p;
   }
   while (p->next) {
-    if (p->next->s < q->s) {
+    if (less(p->next, q)) {
       p = p->next;
     } else {
       t = p->next;
@@ -154,7 +158,7 @@ __global__ void Prepare1(Lane* lanes, uint size) {
   {
     auto* p = l.ped_head;
     while (p) {
-      if (p->next && p->s > p->next->s) {
+      if (p->next && less(p->next, p)) {
         auto* q = p->next;
         ListRemove(q, l.ped_head);
         l.ped_add_buffer.AppendNoLock(q);
@@ -163,34 +167,39 @@ __global__ void Prepare1(Lane* lanes, uint size) {
       }
     }
     p = l.veh_head;
-    while (p) {
+    if (p) {
       auto* q = p->next;
-      if (!q) {
-        break;
-      }
-      if (p->s > q->s) {
-        auto* r = p->prev;
-        if (!r || r->s <= q->s) {
-          // 删除p更划算
-          if (p->overwritable) {
-            // 若可覆盖则不删除
-            p->s = q->s;
+      while (q) {
+        if (less(q, p)) {
+          auto* r = p->prev;
+          if (!r || less(r, q)) {
+            // 删除p更划算
+            // r->p->q
+            if (p->overwritable && p->index < q->index) {
+              // 若可覆盖则不删除
+              p->s = q->s;
+            } else {
+              q->prev = r;
+              (r ? r->next : l.veh_head) = q;
+              l.veh_add_buffer.AppendNoLock(p);
+            }
+            p = q;
+            q = p->next;
           } else {
-            q->prev = r;
-            (r ? r->next : l.veh_head) = q;
-            l.veh_add_buffer.AppendNoLock(p);
+            // 删除q更划算
+            // p->q->r
+            r = p->next = q->next;
+            if (r) {
+              r->prev = p;
+            }
+            l.veh_add_buffer.AppendNoLock(q);
+            q = r;
           }
         } else {
-          // 删除q更划算
-          r = p->next = q->next;
-          if (r) {
-            r->prev = p;
-          }
-          l.veh_add_buffer.AppendNoLock(q);
-          q = r;
+          p = q;
+          q = p->next;
         }
       }
-      p = q;
     }
   }
   // 排序、建立链表、合并
@@ -495,7 +504,7 @@ void Data::Init(Simulet* S, const PbMap& map) {
   }
 }
 
-void Data::PrepareAsync() {
+void Data::PrepareAsync(cudaStream_t stream) {
   // 三次prepare需要串行完成
   if (!lanes.size) {
     return;

@@ -240,8 +240,7 @@ void Simulet::Step() {
     aoi.PrepareAsync();
     junction.PrepareAsync();
     // 需要等待位置更新后才能更新链表
-    CUCHECK(cudaStreamSynchronize(person.stream));
-    lane.PrepareAsync();
+    lane.PrepareAsync(person.stream);
     CUCHECK(cudaDeviceSynchronize());
     CHECK_ERROR;
   }

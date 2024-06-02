@@ -623,6 +623,47 @@ class Engine {
             p.runtime.lc_total_length, p.runtime.lc_complete_length),
         std::make_tuple(route, p.route_index, p.route_lc_offset));
   }
+  auto debug_vehicle_front() {
+#define INDEX(x) ((x) ? int((x)->index) : -1)
+    auto* out = new vec<int>();
+    out->reserve(S.person.M->veh_cnt * 5);
+    for (auto& p : S.person.persons) {
+      if (p.snapshot.status == PersonStatus::DRIVING) {
+        out->push_back(p.node.index);
+        if (p.snapshot.is_lane_changing) {
+          // 变道时只看前方车辆
+          out->push_back(-1);
+          out->push_back(INDEX(p.node.front));
+          out->push_back(-1);
+          out->push_back(INDEX(p.shadow_node.front));
+        } else {
+          // 未变道时看前方和两侧车辆
+          out->push_back(INDEX(p.node.sides[LEFT][FRONT]));
+          out->push_back(INDEX(p.node.front));
+          out->push_back(INDEX(p.node.sides[RIGHT][FRONT]));
+          out->push_back(-1);
+        }
+      }
+    }
+    return asarray(out);
+  }
+  auto debug_vehicle_position() {
+#define INDEX(x) ((x) ? int((x)->index) : -1)
+    auto* out = new vec<double>();
+    out->reserve(S.person.M->veh_cnt * 5);
+    for (auto& p : S.person.persons) {
+      if (p.snapshot.status == PersonStatus::DRIVING) {
+        out->push_back(p.node.index);
+        out->push_back(ID(p.snapshot.lane));
+        out->push_back(p.snapshot.s);
+        out->push_back(p.snapshot.is_lane_changing
+                           ? (double)p.snapshot.shadow_lane->id
+                           : -1);
+        out->push_back(p.snapshot.shadow_s);
+      }
+    }
+    return asarray(out);
+  }
   auto debug_lane_info() {
     vec<vec<int>> out;
     out.reserve(S.lane.lanes.size);
@@ -774,6 +815,8 @@ PYBIND11_MODULE(_simulet, m) {
            "route"_a, "end_lane_id"_a, "end_s"_a, no_gil())
       .def("debug_vehicle_info", &Engine::debug_vehicle_info, no_gil())
       .def("debug_vehicle_full", &Engine::debug_vehicle_full, "id"_a, no_gil())
+      .def("debug_vehicle_front", &Engine::debug_vehicle_front, no_gil())
+      .def("debug_vehicle_position", &Engine::debug_vehicle_position, no_gil())
       .def("debug_lane_info", &Engine::debug_lane_info, no_gil())
       .def("make_checkpoint", &Engine::save, no_gil())
       .def("restore_checkpoint", &Engine::load, "checkpoint_id"_a, no_gil());

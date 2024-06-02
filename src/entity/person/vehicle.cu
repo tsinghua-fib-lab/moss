@@ -823,66 +823,74 @@ __device__ void RefreshRuntime(Person& p, float step_interval) {
     ds = (p.runtime.speed + dv / 2) * step_interval;
     p.runtime.speed += dv;
   }
+  // if (p.runtime.lc_length > 0) {
+  //   // 发起变道
+  //   Lane* target_lane =
+  //       p.snapshot.lane->side_lanes[p.route_lc_offset > 0 ? LEFT : RIGHT];
+  //   //  --------------------------------------------
+  //   //   [2] → → (lane_change_length / ds) → → [3]
+  //   //  --↑-----------------------------------------
+  //   //   [1]     (ignore the width)
+  //   //  --------------------------------------------
+  //   // 1: (snapshot.lane, snapshot.s)
+  //   // 2: (target_lane, neighbor_s)
+  //   // 3: (target_lane, target_s)
+  //   float neighbor_s =
+  //       ProjectFromLane(p.runtime.lane, target_lane, p.runtime.s);
+  //   // 变道必须在当前道路内完成
+  //   float target_s = min(neighbor_s + p.runtime.lc_length,
+  //   target_lane->length); if (neighbor_s + ds >= target_s) {
+  //     // 如果距离不足则直接完成变道
+  //     FinishLaneChange(p, target_lane, neighbor_s);
+  //     DriveStraightAndRefreshLocation(p, ds);
+  //   } else {
+  //     //  --------------------------------------------
+  //     //   [ns] → → → → [ns+ds] → → → → [ts]
+  //     //  --------------------------------------------
+  //     //   [1]            [s]
+  //     //  --------------------------------------------
+  //     // ns: neighbor_s
+  //     // ds: ds
+  //     // ts: target_s
+  //     // s: motion.s
+  //     p.runtime.is_lane_changing = true;
+  //     p.runtime.shadow_lane = target_lane;
+  //     p.runtime.shadow_s = neighbor_s + ds;
+  //     p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
+  //                                   p.runtime.shadow_s);
+  //     p.runtime.lc_total_length = target_s - neighbor_s;
+  //     p.runtime.lc_complete_length = ds;
+  //     p.lc_dir = atan2((p.runtime.lane->width + target_lane->width) / 2,
+  //                      p.runtime.lc_total_length);
+  //     if (p.route_lc_offset < 0) {
+  //       p.lc_dir = -p.lc_dir;
+  //     }
+  //   }
+  // } else if (p.runtime.is_lane_changing) {
+  //   // 正在变道
+  //   if (p.runtime.lc_complete_length + ds >= p.runtime.lc_total_length) {
+  //     // 变道完成
+  //     FinishLaneChange(p, p.runtime.shadow_lane, p.runtime.shadow_s);
+  //     DriveStraightAndRefreshLocation(p, ds);
+  //     ClearLaneChange(p.runtime);
+  //   } else {
+  //     p.runtime.shadow_s += ds;
+  //     p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
+  //                                   p.runtime.shadow_s);
+  //     p.runtime.lc_complete_length += ds;
+  //   }
+  // } else {
+  //   // 直行
+  //   DriveStraightAndRefreshLocation(p, ds);
+  // }
   if (p.runtime.lc_length > 0) {
-    // 发起变道
     Lane* target_lane =
         p.snapshot.lane->side_lanes[p.route_lc_offset > 0 ? LEFT : RIGHT];
-    //  --------------------------------------------
-    //   [2] → → (lane_change_length / ds) → → [3]
-    //  --↑-----------------------------------------
-    //   [1]     (ignore the width)
-    //  --------------------------------------------
-    // 1: (snapshot.lane, snapshot.s)
-    // 2: (target_lane, neighbor_s)
-    // 3: (target_lane, target_s)
     float neighbor_s =
         ProjectFromLane(p.runtime.lane, target_lane, p.runtime.s);
-    // 变道必须在当前道路内完成
-    float target_s = min(neighbor_s + p.runtime.lc_length, target_lane->length);
-    if (neighbor_s + ds >= target_s) {
-      // 如果距离不足则直接完成变道
-      FinishLaneChange(p, target_lane, neighbor_s);
-      DriveStraightAndRefreshLocation(p, ds);
-    } else {
-      //  --------------------------------------------
-      //   [ns] → → → → [ns+ds] → → → → [ts]
-      //  --------------------------------------------
-      //   [1]            [s]
-      //  --------------------------------------------
-      // ns: neighbor_s
-      // ds: ds
-      // ts: target_s
-      // s: motion.s
-      p.runtime.is_lane_changing = true;
-      p.runtime.shadow_lane = target_lane;
-      p.runtime.shadow_s = neighbor_s + ds;
-      p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
-                                    p.runtime.shadow_s);
-      p.runtime.lc_total_length = target_s - neighbor_s;
-      p.runtime.lc_complete_length = ds;
-      p.lc_dir = atan2((p.runtime.lane->width + target_lane->width) / 2,
-                       p.runtime.lc_total_length);
-      if (p.route_lc_offset < 0) {
-        p.lc_dir = -p.lc_dir;
-      }
-    }
-  } else if (p.runtime.is_lane_changing) {
-    // 正在变道
-    if (p.runtime.lc_complete_length + ds >= p.runtime.lc_total_length) {
-      // 变道完成
-      FinishLaneChange(p, p.runtime.shadow_lane, p.runtime.shadow_s);
-      DriveStraightAndRefreshLocation(p, ds);
-      ClearLaneChange(p.runtime);
-    } else {
-      p.runtime.shadow_s += ds;
-      p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
-                                    p.runtime.shadow_s);
-      p.runtime.lc_complete_length += ds;
-    }
-  } else {
-    // 直行
-    DriveStraightAndRefreshLocation(p, ds);
+    FinishLaneChange(p, target_lane, neighbor_s);
   }
+  DriveStraightAndRefreshLocation(p, ds);
   p.runtime.distance_to_end = max(
       p.route.veh->distance_to_end[2 * p.route_index + p.route_in_junction] -
           p.runtime.s,

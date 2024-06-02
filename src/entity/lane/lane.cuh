@@ -115,7 +115,7 @@ struct Data {
 
   void Init(Simulet* S, const PbMap&);
   void InitSizes(Simulet* S);
-  void PrepareAsync();
+  void PrepareAsync(cudaStream_t stream);
   void UpdateAsync();
   void Save(std::vector<LaneCheckpoint>&);
   void Load(const std::vector<LaneCheckpoint>&);
