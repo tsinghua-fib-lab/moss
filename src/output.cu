@@ -44,6 +44,9 @@ void Data::worker() {
 
 void Data::Init(Moss* S, const std::string& filename) {
   this->S = S;
+  if (S->is_python_api) {
+    return;
+  }
   M = S->mem->MValueZero<MData>();
   file.open(filename, std::ios::out | std::ios::binary);
   if (!file) {
@@ -70,17 +73,17 @@ void Data::Init(Moss* S, const std::string& filename) {
 }
 
 void Data::Start() {
-  if (option == Option::DISABLE) return;
+  if (S->is_python_api || option == Option::DISABLE) return;
   barrier.wait();
 }
 
 void Data::Wait() {
-  if (option == Option::DISABLE) return;
+  if (S->is_python_api || option == Option::DISABLE) return;
   barrier.wait();
 }
 
 void Data::Stop() {
-  if (option == Option::DISABLE) return;
+  if (S->is_python_api || option == Option::DISABLE) return;
   stop = true;
   barrier.wait();
   worker_t.join();

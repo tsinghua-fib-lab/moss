@@ -59,7 +59,6 @@ struct Lane {
   uint next_road_id;  // 后面连接的道路ID；仅对交叉口内部车道有效
   bool parent_is_road;
   bool need_side_update;  // 是否需要做支链更新
-  bool need_output;       // 是否需要输出
   float length;
   float center_x, center_y;  // 估计的中心，用于输出
   float max_speed;

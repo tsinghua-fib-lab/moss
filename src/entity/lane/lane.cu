@@ -374,15 +374,13 @@ __global__ void UpdateTrafficLight(Lane** lanes, uint size,
     return;
   }
   auto& l = *lanes[id];
-  if (l.need_output) {
-    auto& o = agent_output->GetAppend();
-    o.type = output::AgentOutputType::TRAFFIC_LIGHT;
-    o.l_id = l.id;
-    o.light_state = l.light_state;
-    o.light_time = l.light_time;
-    o.cx = l.center_x;
-    o.cy = l.center_y;
-  }
+  auto& o = agent_output->GetAppend();
+  o.type = output::AgentOutputType::TRAFFIC_LIGHT;
+  o.l_id = l.id;
+  o.light_state = l.light_state;
+  o.light_time = l.light_time;
+  o.cx = l.center_x;
+  o.cy = l.center_y;
 }
 
 void Data::InitSizes(Moss* S) {

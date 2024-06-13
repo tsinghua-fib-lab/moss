@@ -9,7 +9,9 @@ from pycityproto.city.map.v2 import light_pb2 as PbTl
 from pycityproto.city.map.v2 import map_pb2 as PbMap
 from pycityproto.city.routing.v2 import routing_pb2 as PbRouting
 from pycityproto.city.trip.v2 import trip_pb2 as PbTrip
+from pymongo.collection import Collection
 from shapely.ops import substring
+from tqdm.auto import tqdm
 
 
 def get_dir(x1, y1, x2, y2):
@@ -33,6 +35,60 @@ def pb2dict(pb: Message):
 
 def dict2pb(d: dict, pb: Message, ignore_unknown_fields=False):
     return json_format.ParseDict(d, pb, ignore_unknown_fields=ignore_unknown_fields)
+
+
+def save_pb(pb, path):
+    with open(path, 'wb') as f:
+        f.write(pb.SerializeToString())
+
+
+def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str, out_agent: str, use_tqdm=False):
+    """
+    Convert MongoDB collections into binary files
+    """
+    header = next(iter(map_col.find()))['data']
+    lanes = []
+    roads = []
+    juncs = []
+    aois = []
+    for i in tqdm(map_col.find(), total=map_col.estimated_document_count(), ncols=90, disable=not use_tqdm):
+        i['data'].pop('external', None)
+        if i['class'] == 'lane':
+            lanes.append(i['data'])
+        if i['class'] == 'road':
+            roads.append(i['data'])
+        if i['class'] == 'junction':
+            juncs.append(i['data'])
+        if i['class'] == 'aoi':
+            aois.append(i['data'])
+    _map = PbMap.Map()
+    dict2pb({
+        'header': header,
+        'lanes': lanes,
+        'roads': roads,
+        'junctions': juncs,
+        'aois': aois,
+    }, _map)
+    save_pb(_map, out_map)
+    agents = []
+    err = 0
+    for i in tqdm(agent_col.find(), total=agent_col.estimated_document_count(), ncols=90, disable=not use_tqdm):
+        try:
+            a = i['data']
+            assert len(a['schedules']) == 1
+            assert len(a['schedules'][0]['trips']) == 1
+            assert a['schedules'][0]['trips'][0]['mode'] == PbTrip.TRIP_MODE_DRIVE_ONLY
+            agents.append(a)
+        except:
+            err += 1
+    if err:
+        print(f'Imported {len(agents)} agents with {err} errors')
+    _agents = PbAgent.Agents()
+    dict2pb(
+        {'agents': agents},
+        _agents
+    )
+    save_pb(_agents, out_agent)
 
 
 def convert_from_cityflow(data_map, data_agents, max_agent_start_time):
@@ -329,8 +385,3 @@ def convert_from_cityflow(data_map, data_agents, max_agent_start_time):
         _agents
     )
     return _map, _agents, ids
-
-
-def save_pb(pb, path):
-    with open(path, 'wb') as f:
-        f.write(pb.SerializeToString())

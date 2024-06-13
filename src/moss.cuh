@@ -87,6 +87,9 @@ class Moss {
   output::Data output;
   routing::Data routing;
 
+  std::string map_projection;
+  float map_west, map_east, map_south, map_north;
+
   aoi::Data aoi;
   lane::Data lane;
   road::Data road;

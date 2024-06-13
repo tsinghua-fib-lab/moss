@@ -140,11 +140,16 @@ class Engine:
         junction_blocking_count: int = -1,
         junction_yellow_time: float = 0,
         phase_pressure_coeff: float = 1.5,
-        lane_change: LaneChange = LaneChange.SUMO,
+        lane_change: LaneChange = LaneChange.MOBIL,
         mobil_lc_forbidden_distance: float = 15,
         lane_veh_add_buffer_size: int = 1000,
         lane_veh_remove_buffer_size: int = 1000,
         speed_stat_interval=0,
+        enable_output=False,
+        out_xmin=-1e999,
+        out_ymin=-1e999,
+        out_xmax=1e999,
+        out_ymax=1e999,
         device: int = 0,
     ):
         assert junction_yellow_time >= 0
@@ -175,11 +180,18 @@ class Engine:
             lane_veh_add_buffer_size,
             lane_veh_remove_buffer_size,
             speed_stat_interval,
+            enable_output,
+            out_xmin,
+            out_ymin,
+            out_xmax,
+            out_ymax,
             device,
         )
         self.map_file = map_file
         self.agent_file = agent_file
+        self.start_step = start_step
         self.lane_cnt = self._e.get_lane_count()
+        self.enable_output = enable_output
         self.device = device
         if id_file:
             self.has_id = True
@@ -201,6 +213,7 @@ class Engine:
         out_id: str,
         max_agent_start_time=1e999,
     ):
+        raise NotImplementedError  # FIXME
         _map, _agents, ids = convert_from_cityflow(
             data_map=json.load(open(in_map, "rb")),
             data_agents=json.load(open(in_agent, "rb")),
@@ -214,7 +227,7 @@ class Engine:
     def from_cityflow(
         cityflow_config: dict, output_path=None, max_agent_start_time=1e999
     ):
-        raise NotImplementedError
+        raise NotImplementedError  # FIXME
         map_file = cityflow_config["roadnetFile"]
         agent_file = cityflow_config["flowFile"]
         if output_path is None:

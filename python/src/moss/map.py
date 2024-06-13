@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import List
 
+import pyproj
+
 from .convert import PbMap, PbTl, save_pb
 from .geom import PI, Polyline
 
@@ -128,6 +130,7 @@ class Map:
     def __init__(self, map_file):
         self.pb = m = PbMap.Map()
         m.ParseFromString(open(map_file, "rb").read())
+        self.proj = pyproj.Proj(self.pb.header.projection)
         self.lanes = [Lane(i) for i in m.lanes]
         self.roads = [Road(i) for i in m.roads]
         self.junctions = [Junction(i) for i in m.junctions]

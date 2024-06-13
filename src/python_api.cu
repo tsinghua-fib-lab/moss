@@ -44,14 +44,15 @@ class Engine {
          float phase_pressure_coeff, uint lane_change_algorithm,
          float mobil_lc_forbidden_distance, uint lane_veh_add_buffer_size,
          uint lane_veh_remove_buffer_size, float speed_stat_interval,
-         uint device)
+         bool enable_output, float out_xmin, float out_ymin, float out_xmax,
+         float out_ymax, uint device)
       : S() {
     S.is_python_api = true;
     S.Init({.map_file = map_file,
             .agent_file = agent_file,
             .agent_limit = uint(agent_limit),
             .output_file = "",
-            .output_type = "disable",
+            .output_type = enable_output ? "python" : "disable",
             .speed_stat_interval = speed_stat_interval,
             .start_step = start_step,
             .total_step = 1 << 30,
@@ -61,10 +62,10 @@ class Engine {
             .enable_aoi_indoor = false,
             .enable_junction = !disable_junction,
             .seed = seed,
-            .x_min = 0,
-            .y_min = 0,
-            .x_max = 0,
-            .y_max = 0,
+            .x_min = out_xmin,
+            .y_min = out_ymin,
+            .x_max = out_xmax,
+            .y_max = out_ymax,
             .verbose_level = verbose_level,
             .disable_aoi_out_control = disable_aoi_out_control,
             .n_workers = 0,
@@ -77,6 +78,14 @@ class Engine {
             .lane_veh_remove_buffer_size = lane_veh_remove_buffer_size,
             .device = device});
   }
+  // 获取地图投影
+  std::string get_map_projection() { return S.map_projection; }
+  // 获取地图范围
+  auto get_map_bbox() {
+    return std::make_tuple(S.map_west, S.map_south, S.map_east, S.map_north);
+  }
+  // 获取当前步
+  int get_current_step() { return S.step; }
   // 获取当前时间
   float get_current_time() { return S.time; }
   // 获取车辆总数
@@ -474,6 +483,28 @@ class Engine {
     }
     return S.road.roads[road_index].v_avg;
   }
+  // 获取用于输出的车辆信息 (id, parent_id, x, y, dir)
+  auto get_output_vehicles() {
+    vec<std::tuple<int, int, float, float, float, float>> out;
+    out.reserve(get_running_vehicle_count());
+    for (auto& p : S.person.persons) {
+      if (p.runtime.status == PersonStatus::DRIVING) {
+        out.emplace_back(
+            p.id, p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
+            p.runtime.x, p.runtime.y, p.runtime.dir, p.runtime.speed);
+      }
+    }
+    return out;
+  }
+  // 获取用于输出的信号灯信息 (id, state, x, y)
+  auto get_output_tls() {
+    vec<std::tuple<int, int, float, float>> out;
+    out.reserve(S.lane.output_lanes.size);
+    for (auto* l : S.lane.output_lanes) {
+      out.emplace_back(l->id, l->light_state, l->center_x, l->center_y);
+    }
+    return out;
+  }
   // 设置人禁用
   void set_vehicle_enable(uint vehicle_index, bool enable) {
     if (vehicle_index >= S.person.persons.size) {
@@ -705,7 +736,7 @@ PYBIND11_MODULE(_moss, m) {
       .def_readonly_static("__version__", &VER)
       .def(py::init<const std::string&, const std::string&, uint, float, int,
                     int, int, bool, bool, int, float, float, uint, float, uint,
-                    uint, float, uint>(),
+                    uint, float, bool, float, float, float, float, uint>(),
            "map_file"_a, "agent_file"_a, "start_step"_a, "step_interval"_a = 1,
            "seed"_a = 43, "verbose_level"_a = 0, "agent_limit"_a = -1,
            "disable_aoi_out_control"_a = false, "disable_junction"_a = false,
@@ -714,8 +745,12 @@ PYBIND11_MODULE(_moss, m) {
            "mobil_lc_forbidden_distance"_a = 15,
            "lane_veh_add_buffer_size"_a = 300,
            "lane_veh_remove_buffer_size"_a = 300, "speed_stat_interval"_a = 0,
-           "device"_a = 0, no_gil())
+           "enable_output"_a = false, "out_xmin"_a = 0, "out_ymin"_a = 0,
+           "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0, no_gil())
       .def("next_step", &Engine::next_step, "n"_a = 1, no_gil())
+      .def("get_map_projection", &Engine::get_map_projection, no_gil())
+      .def("get_map_bbox", &Engine::get_map_bbox, no_gil())
+      .def("get_current_step", &Engine::get_current_step, no_gil())
       .def("get_current_time", &Engine::get_current_time, no_gil())
       .def("get_vehicle_count", &Engine::get_vehicle_count, no_gil())
       .def("get_vehicle_ids", &Engine::get_vehicle_ids, no_gil())
@@ -783,6 +818,8 @@ PYBIND11_MODULE(_moss, m) {
            no_gil())
       .def("get_road_average_vehicle_speed",
            &Engine::get_road_average_vehicle_speed, "road_index"_a, no_gil())
+      .def("get_output_vehicles", &Engine::get_output_vehicles, no_gil())
+      .def("get_output_tls", &Engine::get_output_tls, no_gil())
       .def("set_vehicle_enable", &Engine::set_vehicle_enable, "vehicle_index"_a,
            "enable"_a, no_gil())
       .def("set_vehicle_enable_batch", &Engine::set_vehicle_enable_batch,

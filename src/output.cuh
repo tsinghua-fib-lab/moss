@@ -19,6 +19,7 @@ enum class Option : int {
   DISABLE,
   AGENT,
   LANE,
+  PYTHON,
 };
 
 enum class AgentOutputType : int {
@@ -65,7 +66,6 @@ struct Data {
 
  public:
   Option option;
-  float X_MIN, X_MAX, Y_MIN, Y_MAX;
   MData* M;
 
   // 注意：MData在Update中更新，因此应该在Update后Start，Update前Wait

@@ -548,7 +548,7 @@ void Data::UpdateAsync() {
   }
   Update<<<g_update, b_update, 0, stream>>>(
       persons.data, persons.size, S->time, S->config.step_interval,
-      S->output.X_MIN, S->output.X_MAX, S->output.Y_MIN, S->output.Y_MAX,
+      S->config.x_min, S->config.x_max, S->config.y_min, S->config.y_max,
       S->output.option == output::Option::AGENT ? &S->output.M->agent_output
                                                 : nullptr,
       S->is_python_api, S->enable_api_output, veh_lane.data, veh_speed.data,

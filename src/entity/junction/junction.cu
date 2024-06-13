@@ -267,7 +267,6 @@ void Data::Init(Moss* S, const PbMap& map) {
   }
   // TODO: 添加对driving_lane_groups的处理；现在的信控还是基于lane的
   uint index = 0;
-  std::vector<Lane*> output_lanes;
   for (auto& pb : map.junctions()) {
     auto& j = junctions[index];
     // 基本属性
@@ -324,7 +323,9 @@ void Data::Init(Moss* S, const PbMap& map) {
       }
     }
   }
-  if (S->output.option == output::Option::AGENT) {
+  if (S->output.option == output::Option::AGENT ||
+      S->output.option == output::Option::PYTHON) {
+    std::vector<Lane*> output_lanes;
     for (auto& j : junctions) {
       double x = 0, y = 0;
       for (auto* l : j.lanes) {
@@ -333,13 +334,14 @@ void Data::Init(Moss* S, const PbMap& map) {
       }
       x /= j.lanes.size;
       y /= j.lanes.size;
-      if (S->output.X_MIN <= x && x <= S->output.X_MAX &&
-          S->output.Y_MIN <= y && y <= S->output.Y_MAX) {
+      if (S->config.x_min <= x && x <= S->config.x_max &&
+          S->config.y_min <= y && y <= S->config.y_max) {
         for (auto* l : j.lanes) {
           output_lanes.push_back(l);
         }
       }
     }
+    std::sort(output_lanes.begin(), output_lanes.end());
     S->lane.output_lanes.New(S->mem, output_lanes.size());
     uint index = 0;
     for (auto* i : output_lanes) {

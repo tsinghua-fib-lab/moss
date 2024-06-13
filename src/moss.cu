@@ -116,14 +116,13 @@ void Moss::Init(const Config& config_) {
     } else if (config.output_type == "lane") {
       output.option = output::Option::LANE;
       Info("OutputType: Lane");
+    } else if (config.output_type == "python") {
+      output.option = output::Option::PYTHON;
+      Info("OutputType: Python");
     } else {
       Fatal("Unknown output_type: ", config.output_type);
     }
   }
-  output.X_MIN = config.x_min;
-  output.Y_MIN = config.y_min;
-  output.X_MAX = config.x_max;
-  output.Y_MAX = config.y_max;
   road.k_status = config.speed_stat_interval <= 0
                       ? 0
                       : exp(-config.step_interval / config.speed_stat_interval);
@@ -152,6 +151,11 @@ void Moss::Init(const Config& config_) {
       Fatal("Failed to parse agent file.");
     }
     file.close();
+    map_projection = map.header().projection();
+    map_west = map.header().west();
+    map_east = map.header().east();
+    map_south = map.header().south();
+    map_north = map.header().north();
     Info("Lane: ", map.lanes_size());
     Info("Road: ", map.roads_size());
     Info("Junction: ", map.junctions_size());
@@ -203,15 +207,6 @@ void Moss::Init(const Config& config_) {
   // 输出
   if (output.option != output::Option::DISABLE) {
     output.Init(this, config.output_file);
-    if (output.option == output::Option::AGENT) {
-      for (auto& l : lane.lanes) {
-        auto& x = l.center_x;
-        auto& y = l.center_y;
-        l.need_output = !l.parent_is_road && output.X_MIN <= x &&
-                        x <= output.X_MAX && output.Y_MIN <= y &&
-                        y <= output.Y_MAX;
-      }
-    }
   }
 }
 
