@@ -11,20 +11,20 @@
 #include <string>
 #include <thread>
 #include "mem/mem.cuh"
+#include "moss.cuh"
 #include "output.cuh"
 #include "protos.h"
 #include "rpc/routing.cuh"
-#include "simulet.cuh"
 #include "utils/color_print.h"
 #include "utils/debug.cuh"
 #include "utils/profile.h"
 #include "utils/timer.h"
 
-namespace simulet {
+namespace moss {
 
-std::atomic_int simulet_id;
+std::atomic_int moss_id;
 
-size_t Simulet::Save() {
+size_t Moss::Save() {
   auto* p = new Checkpoint;
   checkpoints[(size_t)p] = p;
   p->step = step;
@@ -47,7 +47,7 @@ size_t Simulet::Save() {
   return (size_t)p;
 }
 
-void Simulet::Load(size_t id) {
+void Moss::Load(size_t id) {
   if (checkpoints.find(id) == checkpoints.end()) {
     throw std::range_error("Specified checkpoint does not exist.");
   }
@@ -71,8 +71,8 @@ void Simulet::Load(size_t id) {
   person.veh_total_distance.Load(p->veh_total_distance);
 }
 
-void Simulet::Init(const Config& config_) {
-  id = simulet_id++;
+void Moss::Init(const Config& config_) {
+  id = moss_id++;
   config = config_;
   color_print::enable = verbose = config.verbose_level;
   // 关闭输出缓冲
@@ -215,7 +215,7 @@ void Simulet::Init(const Config& config_) {
   }
 }
 
-void Simulet::Step() {
+void Moss::Step() {
   uint64_t t = Time();
   Tag _(fmt::format("Step: {} Veh: {} Ped: {}", step - config.start_step,
                     person.M->veh_cnt, person.M->ped_cnt)
@@ -277,7 +277,7 @@ void Simulet::Step() {
   time = step * config.step_interval;
 }
 
-void Simulet::Run() {
+void Moss::Run() {
   CUCHECK(cudaSetDevice(config.device));
   for (uint i = 0; i < config.total_step; ++i) {
     Step();
@@ -287,10 +287,10 @@ void Simulet::Run() {
   routing.StopWorkers();
 }
 
-void Simulet::Stop() {
+void Moss::Stop() {
   output.Stop();
   ++step;
   time = step * config.step_interval;
 }
 
-};  // namespace simulet
+};  // namespace moss

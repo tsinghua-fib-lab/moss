@@ -1,10 +1,10 @@
 #include <stdexcept>
 #include "entity/lane/lane.cuh"
 #include "entity/road/road.cuh"
-#include "simulet.cuh"
+#include "moss.cuh"
 
-namespace simulet::road {
-void Data::Init(Simulet* S, const PbMap& map) {
+namespace moss::road {
+void Data::Init(Moss* S, const PbMap& map) {
   roads.New(S->mem, map.roads_size());
   // 建立映射
   {
@@ -130,4 +130,4 @@ void Data::Load(const std::vector<RoadCheckpoint>& state) {
     r.nrl_b = s.nrl_b;
   }
 }
-};  // namespace simulet::road
+};  // namespace moss::road

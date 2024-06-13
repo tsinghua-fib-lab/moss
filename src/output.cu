@@ -2,11 +2,11 @@
 #include "containers/vector.cuh"
 #include "entity/person/person.cuh"
 #include "entity/road/road.cuh"
+#include "moss.cuh"
 #include "output.cuh"
-#include "simulet.cuh"
 #include "utils/color_print.h"
 
-namespace simulet::output {
+namespace moss::output {
 
 template <class T>
 void write(std::ofstream& s, const T& x) {
@@ -42,7 +42,7 @@ void Data::worker() {
   }
 }
 
-void Data::Init(Simulet* S, const std::string& filename) {
+void Data::Init(Moss* S, const std::string& filename) {
   this->S = S;
   M = S->mem->MValueZero<MData>();
   file.open(filename, std::ios::out | std::ios::binary);
@@ -86,4 +86,4 @@ void Data::Stop() {
   worker_t.join();
 }
 
-}  // namespace simulet::output
+}  // namespace moss::output

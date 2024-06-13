@@ -16,11 +16,11 @@
 #include "entity/entity.h"
 #include "protos.h"
 
-namespace simulet {
+namespace moss {
 struct Lane;
 struct Road;
 struct Aoi;
-struct Simulet;
+struct Moss;
 
 namespace routing {
 using namespace city::routing::v2;
@@ -75,15 +75,15 @@ struct Data {
   uint not_replied, not_replied_total;
   std::unordered_map<uint64_t, Response> cache;
   std::shared_mutex cache_mutex;
-  Simulet* S;
+  Moss* S;
 
-  void Init(Simulet* S, const std::string& url, uint num_workers);
+  void Init(Moss* S, const std::string& url, uint num_workers);
   void Prepare();
   void ProcessRequests();
   void StopWorkers();
   void worker();
 };
 }  // namespace routing
-}  // namespace simulet
+}  // namespace moss
 
 #endif

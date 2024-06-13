@@ -1,7 +1,7 @@
 #include <cassert>
 #include "entity/person/person.cuh"
 
-namespace simulet::person {
+namespace moss::person {
 // const float BIKE_SPEED = 4;
 const float DEFAULT_DESIRED_SPEED_ON_LANE = 1.34;
 // const float MAX_NOISE_ON_PEDESTRIAN_SPEED = .5;
@@ -97,4 +97,4 @@ __device__ void UpdatePedestrian(Person& p, float global_time,
   }
   p.runtime.s = s;
 }
-}  // namespace simulet::person
+}  // namespace moss::person

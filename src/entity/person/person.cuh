@@ -11,7 +11,7 @@
 #include "rand/rand.cuh"
 #include "rpc/routing.cuh"
 
-namespace simulet {
+namespace moss {
 
 struct Trip {
   TripMode mode;
@@ -201,11 +201,11 @@ struct Data {
   MArrZ<float> veh_speed, veh_distance, veh_total_distance;
   cudaStream_t stream;
   MData* M;
-  Simulet* S;
+  Moss* S;
   int g_prepare, g_update;
   int b_prepare, b_update;
 
-  void Init(Simulet* S, const PbAgents&, uint);
+  void Init(Moss* S, const PbAgents&, uint);
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<PersonCheckpoint>&);
@@ -222,6 +222,6 @@ __device__ void UpdateVehicle(Person& p, float global_time, float step_interval,
 __device__ void UpdatePedestrian(Person& p, float global_time,
                                  float step_interval);
 }  // namespace person
-}  // namespace simulet
+}  // namespace moss
 
 #endif

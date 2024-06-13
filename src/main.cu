@@ -1,7 +1,7 @@
 #include <unistd.h>
 #include "argparse/argparse.hpp"
 #include "entity/junction/junction.cuh"
-#include "simulet.cuh"
+#include "moss.cuh"
 #include "utils/barrier.h"
 #include "utils/macro.h"
 #include "utils/timer.h"
@@ -9,7 +9,7 @@
 #include "yaml-cpp/yaml.h"
 
 int main(int argc, char** argv) {
-  argparse::ArgumentParser parser("Simulet", VER);
+  argparse::ArgumentParser parser("Moss", VER);
   parser.add_argument("-c", "--config").required().help("path to config file");
   parser.add_argument("-q", "--quiet")
       .default_value(false)
@@ -22,11 +22,11 @@ int main(int argc, char** argv) {
     return 1;
   }
   if (!parser.get<bool>("quiet")) {
-    printf(RED("Simulet " VER "\n"));
+    printf(RED("Moss " VER "\n"));
   }
 
   auto cfg = YAML::LoadFile(parser.get<std::string>("config"));
-  simulet::Simulet s{};
+  moss::Moss s{};
   s.is_python_api = true;
   auto t_init = Time();
   s.Init({
@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
       .device = (uint)cfg["device"].as<int>(),
   });
   t_init = Time() - t_init;
-  auto tl_policy = (simulet::TlPolicy)cfg["junction_tl_policy"].as<int>();
+  auto tl_policy = (moss::TlPolicy)cfg["junction_tl_policy"].as<int>();
   auto tl_duration = cfg["junction_tl_duration"].as<float>();
   for (auto& j : s.junction.junctions) {
     j.tl_policy = tl_policy;

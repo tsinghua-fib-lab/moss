@@ -8,14 +8,14 @@
 #include "protos.h"
 #include "utils/geometry.cuh"
 
-namespace simulet {
+namespace moss {
 
 struct Aoi;
 struct Lane;
 struct PersonNode;
 struct Junction;
 struct Road;
-struct Simulet;
+struct Moss;
 
 struct LaneConnection {
   uint type;
@@ -107,14 +107,14 @@ struct Data {
   MArrZ<Lane*> output_lanes;
   std::unordered_map<uint, Lane*> lane_map;
   cudaStream_t stream;
-  Simulet* S;
+  Moss* S;
   int g_prepare0, g_prepare1, g_prepare2, g_update_tl, g_update_rs, g_update_ro,
       g_update_ls;
   int b_prepare0, b_prepare1, b_prepare2, b_update_tl, b_update_rs, b_update_ro,
       b_update_ls;
 
-  void Init(Simulet* S, const PbMap&);
-  void InitSizes(Simulet* S);
+  void Init(Moss* S, const PbMap&);
+  void InitSizes(Moss* S);
   void PrepareAsync(cudaStream_t stream);
   void UpdateAsync();
   void Save(std::vector<LaneCheckpoint>&);
@@ -122,6 +122,6 @@ struct Data {
 };
 }  // namespace lane
 
-}  // namespace simulet
+}  // namespace moss
 
 #endif

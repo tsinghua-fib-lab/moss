@@ -2,12 +2,12 @@
 #include "entity/aoi/aoi.cuh"
 #include "entity/aoi/crowd/crowd.cuh"
 #include "entity/person/person.cuh"
+#include "moss.cuh"
 #include "rand/rand.cuh"
-#include "simulet.cuh"
 #include "utils/geometry.cuh"
 #include "utils/macro.h"
 
-namespace simulet::crowd {
+namespace moss::crowd {
 // 行人在室内的闲逛的状态转移概率(index与enum StrollTarget对应)
 __managed__ float CDF_STROLL[] = {0.5, 0.8, 1};
 
@@ -239,7 +239,7 @@ __device__ void CrowdPersonUpdate(const Crowd& crowd, CrowdPerson& p) {
   }
 }
 
-void Init(Simulet* S, const PbAoi& pb, Aoi& a) {
+void Init(Moss* S, const PbAoi& pb, Aoi& a) {
   auto& c = a.crowd;
   c.rng.SetSeed(S->seed++);
   // 初始化容器
@@ -386,4 +386,4 @@ __device__ void Update(Aoi& a, float step_interval) {
     }
   }
 }
-};  // namespace simulet::crowd
+};  // namespace moss::crowd

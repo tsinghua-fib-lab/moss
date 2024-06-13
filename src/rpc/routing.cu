@@ -10,13 +10,13 @@
 #include "entity/aoi/aoi.cuh"
 #include "entity/lane/lane.cuh"
 #include "entity/road/road.cuh"
+#include "moss.cuh"
 #include "rpc/routing.cuh"
-#include "simulet.cuh"
 #include "utils/color_print.h"
 #include "utils/timer.h"
 #include "utils/utils.cuh"
 
-namespace simulet::routing {
+namespace moss::routing {
 
 void Data::worker() {
   uint64_t _t = 0, _last_cnt = 0;
@@ -213,7 +213,7 @@ void Data::worker() {
   }
 }
 
-void Data::Init(Simulet* S, const std::string& url, uint num_workers) {
+void Data::Init(Moss* S, const std::string& url, uint num_workers) {
   this->S = S;
   d_post = S->mem->MValueZero<DVector<routing::Request>>();
   d_post->mem = S->mem;
@@ -274,4 +274,4 @@ void Data::StopWorkers() {
     w.join();
   }
 }
-}  // namespace simulet::routing
+}  // namespace moss::routing

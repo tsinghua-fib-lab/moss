@@ -11,14 +11,14 @@
 #include "entity/junction/junction.cuh"
 #include "entity/lane/lane.cuh"
 #include "mem/mem.cuh"
+#include "moss.cuh"
 #include "output.cuh"
 #include "protos.h"
-#include "simulet.cuh"
 #include "utils/color_print.h"
 #include "utils/macro.h"
 #include "utils/utils.cuh"
 
-namespace simulet::junction {
+namespace moss::junction {
 // 根据本车道s坐标计算切向角度
 __device__ float GetDirectionByS(Lane* lane) {
   auto s = lane->length;
@@ -93,7 +93,7 @@ void Add(std::vector<T>& a, const std::vector<T> b) {
   a.insert(a.end(), b.begin(), b.end());
 }
 
-void GenerateAvailablePhases(Simulet* S, Junction& jc) {
+void GenerateAvailablePhases(Moss* S, Junction& jc) {
   // 按接入道路的角度将路口内的车道分为4类
   std::vector<Lane*> driving_lanes;
   for (auto* l : jc.lanes) {
@@ -252,7 +252,7 @@ __global__ void Update(Junction* junctions, uint size, float step_interval,
                        phase_pressure_coeff);
 }
 
-void Data::Init(Simulet* S, const PbMap& map) {
+void Data::Init(Moss* S, const PbMap& map) {
   this->S = S;
   stream = NewStream();
   junctions.New(S->mem, map.junctions_size());
@@ -402,4 +402,4 @@ void Data::Load(const std::vector<JunctionCheckpoint>& state) {
     tl.set_force = s.set_force;
   }
 }
-}  // namespace simulet::junction
+}  // namespace moss::junction

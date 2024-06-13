@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 
@@ -63,9 +63,10 @@ class CMakeBuild(build_ext):
             ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env
         )
         subprocess.check_call(
-            ["cmake", "--build", ".", "--target", "_simulet"] + build_args,
+            ["cmake", "--build", ".", "--target", "_moss"] + build_args,
             cwd=self.build_temp,
         )
+
 
 setup(
     ext_modules=[CMakeExtension("moss")],

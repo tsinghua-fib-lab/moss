@@ -7,12 +7,12 @@
 #include <string>
 #include <tuple>
 #include <vector>
-#include "simulet.cuh"
+#include "moss.cuh"
 #include "utils/macro.h"
 
 namespace py = pybind11;
 using namespace py::literals;
-using namespace simulet;
+using namespace moss;
 template <class T>
 using vec = std::vector<T>;
 using std::pair;
@@ -34,7 +34,7 @@ vec<T>& remove_duplicate(vec<T>& arr) {
 
 class Engine {
  private:
-  Simulet S;
+  Moss S;
 
  public:
   Engine(const std::string& map_file, const std::string& agent_file,
@@ -700,7 +700,7 @@ int get_device() {
   return device;
 }
 
-PYBIND11_MODULE(_simulet, m) {
+PYBIND11_MODULE(_moss, m) {
   py::class_<Engine>(m, "Engine")
       .def_readonly_static("__version__", &VER)
       .def(py::init<const std::string&, const std::string&, uint, float, int,

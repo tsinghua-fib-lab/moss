@@ -3,9 +3,9 @@
 #include "entity/person/person.cuh"
 #include "entity/road/road.cuh"
 #include "fmt/core.h"
-#include "simulet.cuh"
+#include "moss.cuh"
 
-namespace simulet {
+namespace moss {
 
 // 计算指定lane到路由许可车道范围的差距
 __device__ __host__ int LcOffset(const Person& p, const Lane* l) {
@@ -980,4 +980,4 @@ __device__ void UpdateVehicle(Person& p, float global_time, float step_interval,
   }
 }
 }  // namespace person
-}  // namespace simulet
+}  // namespace moss

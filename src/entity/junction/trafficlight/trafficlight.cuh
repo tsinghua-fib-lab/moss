@@ -7,7 +7,7 @@
 #include "entity//lane/lane.cuh"
 #include "protos.h"
 
-namespace simulet::trafficlight {
+namespace moss::trafficlight {
 struct MPTLRuntime {
   float remaining_time;  // 当前相位剩余时间
 };
@@ -34,6 +34,6 @@ __device__ void Update(Junction& jc, MPTrafficLight& tl, float step_interval,
 __device__ void UpdateApi(Junction& jc, MPTrafficLight& tl,
                           float step_interval);
 
-}  // namespace simulet::trafficlight
+}  // namespace moss::trafficlight
 
 #endif

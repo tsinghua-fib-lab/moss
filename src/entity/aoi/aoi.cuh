@@ -8,12 +8,12 @@
 #include "protos.h"
 #include "utils/geometry.cuh"
 
-namespace simulet {
+namespace moss {
 
 struct Person;
 struct Lane;
 struct LaneObservation;
-struct Simulet;
+struct Moss;
 
 struct AoiGate {
   float s, x, y;
@@ -55,11 +55,11 @@ struct Data {
   MArrZ<Aoi> aois;
   std::unordered_map<uint, Aoi*> aoi_map;
   cudaStream_t stream;
-  Simulet* S;
+  Moss* S;
   int g_prepare, g_update;
   int b_prepare, b_update;
 
-  void Init(Simulet* S, const PbMap&);
+  void Init(Moss* S, const PbMap&);
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<AoiCheckpoint>&);
@@ -67,6 +67,6 @@ struct Data {
 };
 }  // namespace aoi
 
-}  // namespace simulet
+}  // namespace moss
 
 #endif

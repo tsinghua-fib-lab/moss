@@ -3,12 +3,12 @@
 
 #include "utils/macro.h"
 
-namespace simulet {
+namespace moss {
 struct Position {
   bool is_aoi;
   uint id;
   float s;
 };
-}  // namespace simulet
+}  // namespace moss
 
 #endif

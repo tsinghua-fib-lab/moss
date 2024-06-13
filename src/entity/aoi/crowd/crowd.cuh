@@ -7,11 +7,11 @@
 #include "rand/rand.cuh"
 #include "utils/geometry.cuh"
 
-namespace simulet {
+namespace moss {
 
 struct Person;
 struct AoiGate;
-struct Simulet;
+struct Moss;
 
 namespace crowd {
 
@@ -85,9 +85,9 @@ struct Crowd {
   __device__ void WalkToGate(Person* p, AoiGate* gate, bool is_veh);
 };
 
-void Init(Simulet* S, const PbAoi&, Aoi&);
+void Init(Moss* S, const PbAoi&, Aoi&);
 __device__ void Prepare(Aoi& a);
 __device__ void Update(Aoi& a, float step_interval);
 }  // namespace crowd
-}  // namespace simulet
+}  // namespace moss
 #endif

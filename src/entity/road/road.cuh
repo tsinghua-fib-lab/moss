@@ -4,10 +4,10 @@
 #include "containers/array.cuh"
 #include "protos.h"
 
-namespace simulet {
+namespace moss {
 
 struct Lane;
-struct Simulet;
+struct Moss;
 
 struct RoadCheckpoint {
   float max_speed;
@@ -43,12 +43,12 @@ struct Data {
   std::unordered_map<uint, Road*> road_map;
   float k_status;  // 平滑系数
 
-  void Init(Simulet* S, const PbMap&);
+  void Init(Moss* S, const PbMap&);
   void Save(std::vector<RoadCheckpoint>&);
   void Load(const std::vector<RoadCheckpoint>&);
 };
 }  // namespace road
 
-}  // namespace simulet
+}  // namespace moss
 
 #endif

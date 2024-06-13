@@ -1,5 +1,5 @@
-#ifndef SRC_SIMULET_H_
-#define SRC_SIMULET_H_
+#ifndef SRC_MOSS_CUH_
+#define SRC_MOSS_CUH_
 
 #include <cuda.h>
 #include <map>
@@ -14,7 +14,7 @@
 #include "mem/mem.cuh"
 #include "output.cuh"
 
-namespace simulet {
+namespace moss {
 struct Config {
   std::string map_file, agent_file;
   uint agent_limit;
@@ -67,7 +67,7 @@ struct Checkpoint {
   std::vector<float> veh_total_distance;
 };
 
-class Simulet {
+class Moss {
  private:
   std::map<size_t, Checkpoint*> checkpoints;
   uint64_t last_step_t;
@@ -106,6 +106,6 @@ class Simulet {
   // 恢复模拟器状态为指定的存档
   void Load(size_t);
 };
-};  // namespace simulet
+};  // namespace moss
 
 #endif

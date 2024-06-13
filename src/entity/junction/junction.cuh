@@ -7,8 +7,8 @@
 #include "entity/lane/lane.cuh"
 #include "protos.h"
 
-namespace simulet {
-struct Simulet;
+namespace moss {
+struct Moss;
 
 enum TlPolicy {
   MANUAL,        // 手动控制，不自动切换
@@ -42,11 +42,11 @@ struct Data {
   MArrZ<Junction> junctions;
   std::unordered_map<uint, Junction*> junction_map;
   cudaStream_t stream;
-  Simulet* S;
+  Moss* S;
   int g_prepare, g_update;
   int b_prepare, b_update;
 
-  void Init(Simulet* S, const PbMap&);
+  void Init(Moss* S, const PbMap&);
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<JunctionCheckpoint>&);
@@ -54,6 +54,6 @@ struct Data {
 };
 }  // namespace junction
 
-}  // namespace simulet
+}  // namespace moss
 
 #endif

@@ -11,7 +11,7 @@
 #include "utils/macro.h"
 #include "utils/utils.cuh"
 
-namespace simulet::trafficlight {
+namespace moss::trafficlight {
 __device__ void SetLight(Lane* l, LightState ls, float remaining_time) {
   l->light_state = ls;
   l->light_time = remaining_time;
@@ -166,4 +166,4 @@ __device__ void Update(Junction& jc, MPTrafficLight& tl, float step_interval,
   }
 }
 
-}  // namespace simulet::trafficlight
+}  // namespace moss::trafficlight

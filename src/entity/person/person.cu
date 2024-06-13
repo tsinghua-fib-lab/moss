@@ -9,15 +9,15 @@
 #include "entity/person/person.cuh"
 #include "entity/road/road.cuh"
 #include "mem/mem.cuh"
+#include "moss.cuh"
 #include "output.cuh"
 #include "protos.h"
 #include "rpc/routing.cuh"
-#include "simulet.cuh"
 #include "utils/color_print.h"
 #include "utils/macro.h"
 #include "utils/utils.cuh"
 
-namespace simulet {
+namespace moss {
 __device__ __host__ Trip& Person::GetTrip() {
   return schedules[schedule_index].trips[trip_index];
 }
@@ -68,7 +68,7 @@ __device__ bool Person::NextTrip(float time) {
 }
 
 // 处理预定义的路由，代码与routing中的基本一致
-void ProcessPredefinedRoute(Simulet* S, Person& p, const PbPosition& home,
+void ProcessPredefinedRoute(Moss* S, Person& p, const PbPosition& home,
                             routing::Response& res, const PbSchedule& pb) {
   res.ok = res.ready = res.is_veh = true;
   auto& rids = pb.trips(0).routes(0).driving().road_ids();
@@ -358,7 +358,7 @@ __global__ void Update(Person* persons, uint size, float global_time,
   }
 }
 
-void Data::Init(Simulet* S, const PbAgents& agents, uint agent_limit) {
+void Data::Init(Moss* S, const PbAgents& agents, uint agent_limit) {
   M = S->mem->MValueZero<MData>();
   this->S = S;
   stream = NewStream();
@@ -618,4 +618,4 @@ void Data::Load(const std::vector<PersonCheckpoint>& state) {
   }
 }
 }  // namespace person
-}  // namespace simulet
+}  // namespace moss

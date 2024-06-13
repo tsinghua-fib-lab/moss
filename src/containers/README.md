@@ -1,10 +1,10 @@
-# simulet::Vector
+# moss::Vector
 
 目的：提供一种从GPU端收集数据到CPU端的容器。
 
 示例代码
 ```cpp
-__global__ void compute(simulet::DVector<int>* a) {
+__global__ void compute(moss::DVector<int>* a) {
   auto id = threadIdx.x + blockIdx.x * blockDim.x;
   // 向容器中添加数据
   if (id % 2 == 1) {
@@ -14,7 +14,7 @@ __global__ void compute(simulet::DVector<int>* a) {
 
 int main() {
   // 创建容器用于接收数据
-  simulet::Vector<int> a;
+  moss::Vector<int> a;
   // 用.Cuda获取将容器的GPU部分，传给kernel
   compute<<<2, 4>>>(a.Cuda());
   // 同步
@@ -28,7 +28,7 @@ int main() {
 }
 ```
 
-# simulet::Post
+# moss::Post
 
 目的：实现GPU发起请求->CPU处理请求->GPU接收回复的流程
 

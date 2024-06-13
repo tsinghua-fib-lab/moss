@@ -8,8 +8,8 @@
 #include "containers/vector.cuh"
 #include "utils/barrier.h"
 
-namespace simulet {
-struct Simulet;
+namespace moss {
+struct Moss;
 struct Lane;
 
 namespace output {
@@ -60,7 +60,7 @@ struct Data {
   bool stop;
   Barrier barrier;
   std::vector<Lane*> output_lanes;
-  Simulet* S;
+  Moss* S;
   void worker();
 
  public:
@@ -71,7 +71,7 @@ struct Data {
   // 注意：MData在Update中更新，因此应该在Update后Start，Update前Wait
 
   // 初始化输出
-  void Init(Simulet* S, const std::string& filename);
+  void Init(Moss* S, const std::string& filename);
   // 开始并行输出MData中的内容
   void Start();
   // 等待并行输出结束
@@ -80,6 +80,6 @@ struct Data {
   void Stop();
 };
 }  // namespace output
-}  // namespace simulet
+}  // namespace moss
 
 #endif

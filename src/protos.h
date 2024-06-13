@@ -9,7 +9,7 @@
 #include "city/routing/v2/routing_service.pb.h"
 #include "city/trip/v2/trip.pb.h"
 
-namespace simulet {
+namespace moss {
 // 地图
 using PbAoi = city::map::v2::Aoi;
 using PbMap = city::map::v2::Map;
@@ -35,5 +35,5 @@ using MovingDirection = city::routing::v2::MovingDirection;
 using JourneyType = ::city::routing::v2::JourneyType;
 
 using PbPosition = city::geo::v2::Position;
-}  // namespace simulet
+}  // namespace moss
 #endif

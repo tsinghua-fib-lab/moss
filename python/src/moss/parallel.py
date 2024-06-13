@@ -12,7 +12,7 @@ from .engine import Engine
 
 class ParallelEngine(Engine):
     """
-    Simulet Engine for parallel simulation    
+    Moss Engine for parallel simulation    
     """
 
     def init(self):

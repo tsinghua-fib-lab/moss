@@ -18,15 +18,15 @@ from .map import Map
 
 
 def _import():
-    path = glob(os.path.dirname(os.path.abspath(__file__)) + "/_simulet*.so")[0]
-    loader = importlib.machinery.ExtensionFileLoader("_simulet", path)
+    path = glob(os.path.dirname(os.path.abspath(__file__)) + "/_moss*.so")[0]
+    loader = importlib.machinery.ExtensionFileLoader("_moss", path)
     spec = importlib.util.spec_from_loader(loader.name, loader)
-    _simulet = importlib.util.module_from_spec(spec)
-    loader.exec_module(_simulet)
-    return _simulet
+    _moss = importlib.util.module_from_spec(spec)
+    loader.exec_module(_moss)
+    return _moss
 
 
-_simulet = _import()
+_moss = _import()
 _thread_local = threading.local()
 
 
@@ -118,12 +118,12 @@ class VehicleInfo:
 
 class Engine:
     """
-    Simulet Engine
+    Moss Engine
 
-    NOTE: Cannot create multiple Engines on different device. For that purpose, use `simulet.parallel.ParallelEngine` instead.
+    NOTE: Cannot create multiple Engines on different device. For that purpose, use `moss.parallel.ParallelEngine` instead.
     """
 
-    __version__ = _simulet.__version__
+    __version__ = _moss.__version__
 
     def __init__(
         self,
@@ -152,12 +152,12 @@ class Engine:
             _thread_local.device = device
         elif _thread_local.device != device:
             raise RuntimeError(
-                "Cannot create multiple Engines on different device! Use simulet.parallel.ParallelEngine instead."
+                "Cannot create multiple Engines on different device! Use moss.parallel.ParallelEngine instead."
             )
         self.speed_stat_interval = speed_stat_interval
         if speed_stat_interval < 0:
             raise ValueError("Cannot set speed_stat_interval to be less than 0")
-        self._e = _simulet.Engine(
+        self._e = _moss.Engine(
             map_file,
             agent_file,
             start_step,
@@ -214,6 +214,7 @@ class Engine:
     def from_cityflow(
         cityflow_config: dict, output_path=None, max_agent_start_time=1e999
     ):
+        raise NotImplementedError
         map_file = cityflow_config["roadnetFile"]
         agent_file = cityflow_config["flowFile"]
         if output_path is None:
@@ -222,15 +223,15 @@ class Engine:
         Engine.convert_map_agent(
             in_map=map_file,
             in_agent=agent_file,
-            out_map=output_path + "/_simulet_map.bin",
-            out_agent=output_path + "/_simulet_agent.bin",
-            out_id=output_path + "/_simulet_id.bin",
+            out_map=output_path + "/_moss_map.bin",
+            out_agent=output_path + "/_moss_agent.bin",
+            out_id=output_path + "/_moss_id.bin",
             max_agent_start_time=max_agent_start_time,
         )
         return Engine(
-            map_file=output_path + "/_simulet_map.bin",
-            agent_file=output_path + "/_simulet_agent.bin",
-            id_file=output_path + "/_simulet_id.bin",
+            map_file=output_path + "/_moss_map.bin",
+            agent_file=output_path + "/_moss_agent.bin",
+            id_file=output_path + "/_moss_id.bin",
             start_step=0,
             step_interval=cityflow_config["interval"],
             seed=cityflow_config["seed"],

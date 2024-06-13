@@ -3,14 +3,14 @@
 #include "entity/lane/lane.cuh"
 #include "entity/person/person.cuh"
 #include "entity/road/road.cuh"
+#include "moss.cuh"
 #include "output.cuh"
 #include "protos.h"
-#include "simulet.cuh"
 #include "utils/debug.cuh"
 #include "utils/geometry.cuh"
 #include "utils/utils.cuh"
 
-namespace simulet {
+namespace moss {
 
 __device__ bool Lane::IsNoEntry() {
   return !parent_is_road && light_state != LightState::LIGHT_STATE_GREEN;
@@ -385,7 +385,7 @@ __global__ void UpdateTrafficLight(Lane** lanes, uint size,
   }
 }
 
-void Data::InitSizes(Simulet* S) {
+void Data::InitSizes(Moss* S) {
   SetGridBlockSize(UpdateTrafficLight, output_lanes.size, S->sm_count,
                    g_update_tl, b_update_tl);
   SetGridBlockSize(UpdateLaneStatistics, lanes.size, S->sm_count, g_update_ls,
@@ -396,7 +396,7 @@ void Data::InitSizes(Simulet* S) {
                    g_update_ro, b_update_ro);
 }
 
-void Data::Init(Simulet* S, const PbMap& map) {
+void Data::Init(Moss* S, const PbMap& map) {
   this->S = S;
   stream = NewStream();
   lanes.New(S->mem, map.lanes_size());
@@ -580,4 +580,4 @@ void Data::Load(const std::vector<LaneCheckpoint>& state) {
   }
 }
 }  // namespace lane
-}  // namespace simulet
+}  // namespace moss

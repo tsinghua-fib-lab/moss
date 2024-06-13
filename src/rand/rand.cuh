@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace simulet::rand {
+namespace moss::rand {
 
 // class Rng1024 {
 //   uint64_t state[16];
@@ -81,6 +81,6 @@ struct Rng64 {
     return arr[RandInt(arr.size)];
   }
 };
-}  // namespace simulet::rand
+}  // namespace moss::rand
 
 #endif

@@ -5,16 +5,16 @@
 #include "entity/aoi/crowd/crowd.cuh"
 #include "entity/lane/lane.cuh"
 #include "entity/person/person.cuh"
+#include "moss.cuh"
 #include "output.cuh"
 #include "protos.h"
 #include "rpc/routing.cuh"
-#include "simulet.cuh"
 #include "utils/color_print.h"
 #include "utils/debug.cuh"
 #include "utils/macro.h"
 #include "utils/utils.cuh"
 
-namespace simulet {
+namespace moss {
 
 float Aoi::GetDrivingS(Lane* lane) {
   for (auto& g : driving_gates) {
@@ -250,7 +250,7 @@ __global__ void Update(Aoi* aois, uint size, float global_time,
   }
 }
 
-void Data::Init(Simulet* S, const PbMap& map) {
+void Data::Init(Moss* S, const PbMap& map) {
   this->S = S;
   stream = NewStream();
   aois.New(S->mem, map.aois_size());
@@ -380,4 +380,4 @@ void Data::Load(const std::vector<AoiCheckpoint>& state) {
   }
 }
 }  // namespace aoi
-}  // namespace simulet
+}  // namespace moss
