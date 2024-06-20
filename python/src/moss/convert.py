@@ -42,7 +42,7 @@ def save_pb(pb, path):
         f.write(pb.SerializeToString())
 
 
-def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str, out_agent: str, use_tqdm=False):
+def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str, out_agent: str, use_tqdm=False, ignore_unknown_fields=False):
     """
     Convert MongoDB collections into binary files
     """
@@ -68,7 +68,7 @@ def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str,
         'roads': roads,
         'junctions': juncs,
         'aois': aois,
-    }, _map)
+    }, _map, ignore_unknown_fields=ignore_unknown_fields)
     save_pb(_map, out_map)
     agents = []
     err = 0
@@ -86,7 +86,8 @@ def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str,
     _agents = PbAgent.Agents()
     dict2pb(
         {'agents': agents},
-        _agents
+        _agents,
+        ignore_unknown_fields=ignore_unknown_fields
     )
     save_pb(_agents, out_agent)
 
