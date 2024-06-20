@@ -21,9 +21,9 @@ using no_gil = py::call_guard<py::gil_scoped_release>;
 template <typename T>
 inline py::array_t<typename T::value_type> asarray(T* ptr) {
   py::gil_scoped_acquire _;
-  auto capsule =
-      py::capsule(ptr, [](void* p) { delete reinterpret_cast<T*>(p); });
-  return py::array(ptr->size(), ptr->data(), capsule);
+  return py::array(ptr->size(), ptr->data(), py::capsule(ptr, [](void* p) {
+                     delete reinterpret_cast<T*>(p);
+                   }));
 }
 template <class T>
 vec<T>& remove_duplicate(vec<T>& arr) {
@@ -485,25 +485,37 @@ class Engine {
   }
   // 获取用于输出的车辆信息 (id, parent_id, x, y, dir)
   auto get_output_vehicles() {
-    vec<std::tuple<int, int, float, float, float, float>> out;
+    vec<std::tuple<int, int, float, float>> out;
+    auto xs = new vec<float>;
+    auto ys = new vec<float>;
     out.reserve(get_running_vehicle_count());
+    xs->reserve(get_running_vehicle_count());
+    ys->reserve(get_running_vehicle_count());
     for (auto& p : S.person.persons) {
       if (p.runtime.status == PersonStatus::DRIVING) {
-        out.emplace_back(
-            p.id, p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
-            p.runtime.x, p.runtime.y, p.runtime.dir, p.runtime.speed);
+        out.emplace_back(p.id,
+                         p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
+                         p.runtime.dir, p.runtime.speed);
+        xs->push_back(p.runtime.x);
+        ys->push_back(p.runtime.y);
       }
     }
-    return out;
+    return std::make_tuple(out, asarray(xs), asarray(ys));
   }
   // 获取用于输出的信号灯信息 (id, state, x, y)
   auto get_output_tls() {
-    vec<std::tuple<int, int, float, float>> out;
+    vec<std::tuple<int, int>> out;
+    auto xs = new vec<float>;
+    auto ys = new vec<float>;
     out.reserve(S.lane.output_lanes.size);
+    xs->reserve(S.lane.output_lanes.size);
+    ys->reserve(S.lane.output_lanes.size);
     for (auto* l : S.lane.output_lanes) {
-      out.emplace_back(l->id, l->light_state, l->center_x, l->center_y);
+      out.emplace_back(l->id, l->light_state);
+      xs->push_back(l->center_x);
+      ys->push_back(l->center_y);
     }
-    return out;
+    return std::make_tuple(out, asarray(xs), asarray(ys));
   }
   // 设置人禁用
   void set_vehicle_enable(uint vehicle_index, bool enable) {

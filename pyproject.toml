@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-moss"
-version = "0.3.4"
+version = "0.3.5"
 description = "MObility Simulation System"
 authors = [
   { name = "Wenxuan Ao", email = "aowx21@outlook.com" },
@@ -26,7 +26,7 @@ dependencies = [
   "pycityproto==1.13.1",
   "igraph",
   "tqdm",
-  "psycopg",
+  "psycopg2-binary>=2.5,<3",
   "pyproj",
 ]
 
