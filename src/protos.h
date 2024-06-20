@@ -1,9 +1,9 @@
 #ifndef SRC_PROTO_H_
 #define SRC_PROTO_H_
 
-#include "city/agent/v2/agent.pb.h"
 #include "city/geo/v2/geo.pb.h"
 #include "city/map/v2/map.pb.h"
+#include "city/person/v1/person.pb.h"
 #include "city/routing/v2/routing.pb.h"
 #include "city/routing/v2/routing_service.grpc.pb.h"
 #include "city/routing/v2/routing_service.pb.h"
@@ -18,10 +18,9 @@ using PbLane = city::map::v2::Lane;
 using PbLaneType = city::map::v2::LaneType;
 using PbRoad = city::map::v2::Road;
 using PbJunction = city::map::v2::Junction;
-using PbAgents = city::agent::v2::Agents;
-using PbAgent = city::agent::v2::Agent;
+using PbAgents = city::person::v1::Persons;
+using PbAgent = city::person::v1::Person;
 using PbSchedule = city::trip::v2::Schedule;
-using AgentType = city::agent::v2::AgentType;
 using TripMode = city::trip::v2::TripMode;
 using LightState = city::map::v2::LightState;
 

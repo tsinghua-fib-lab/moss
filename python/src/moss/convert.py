@@ -4,9 +4,9 @@ from copy import deepcopy
 import shapely
 from google.protobuf import json_format
 from google.protobuf.message import Message
-from pycityproto.city.agent.v2 import agent_pb2 as PbAgent
 from pycityproto.city.map.v2 import light_pb2 as PbTl
 from pycityproto.city.map.v2 import map_pb2 as PbMap
+from pycityproto.city.person.v1 import person_pb2 as PbAgent
 from pycityproto.city.routing.v2 import routing_pb2 as PbRouting
 from pycityproto.city.trip.v2 import trip_pb2 as PbTrip
 from pymongo.collection import Collection
@@ -83,9 +83,9 @@ def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str,
             err += 1
     if err:
         print(f'Imported {len(agents)} agents with {err} errors')
-    _agents = PbAgent.Agents()
+    _agents = PbAgent.Persons()
     dict2pb(
-        {'agents': agents},
+        {'persons': agents},
         _agents,
         ignore_unknown_fields=ignore_unknown_fields
     )
@@ -93,6 +93,7 @@ def convert_from_mongo(map_col: Collection, agent_col: Collection, out_map: str,
 
 
 def convert_from_cityflow(data_map, data_agents, max_agent_start_time):
+    raise NotImplementedError  # FIXME
     is_virtual = {i['id']: i['virtual'] for i in data_map['intersections']}
 
     lane_id = 0 - 1
@@ -324,7 +325,6 @@ def convert_from_cityflow(data_map, data_agents, max_agent_start_time):
         agent = {
             "id": agent_id,
             "attribute": {
-                "type": PbAgent.AGENT_TYPE_PRIVATE_CAR,
                 "length": _a['vehicle']['length'],
                 "width": _a['vehicle']['width'],
                 "max_speed": _a['vehicle']['maxSpeed'],

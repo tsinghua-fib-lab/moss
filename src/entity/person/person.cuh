@@ -27,7 +27,6 @@ struct Schedule {
 };
 
 struct PersonAttr {
-  // AgentType type; // 此属性不使用
   // 通用属性
   float length, width;
   float max_speed;

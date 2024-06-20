@@ -362,7 +362,7 @@ void Data::Init(Moss* S, const PbAgents& agents, uint agent_limit) {
   M = S->mem->MValueZero<MData>();
   this->S = S;
   stream = NewStream();
-  assert(agent_limit <= agents.agents_size());
+  assert(agent_limit <= agents.persons_size());
   persons.New(S->mem, agent_limit);
   SetGridBlockSize(Prepare, persons.size, S->sm_count, g_prepare, b_prepare);
   SetGridBlockSize(Update, persons.size, S->sm_count, g_update, b_update);
@@ -381,7 +381,7 @@ void Data::Init(Moss* S, const PbAgents& agents, uint agent_limit) {
   uint index = 0;
   float earliest_departure = 1e999;
   bool warn_aoi = false;
-  for (auto& pb : agents.agents()) {
+  for (auto& pb : agents.persons()) {
     if (S->is_python_api) {
       if (pb.schedules_size() == 0 || pb.schedules(0).trips_size() == 0 ||
           pb.schedules(0).trips(0).mode() != TripMode::TRIP_MODE_DRIVE_ONLY) {
@@ -510,8 +510,8 @@ void Data::Init(Moss* S, const PbAgents& agents, uint agent_limit) {
           .resp = &r};
     }
   }
-  if (index < agents.agents_size()) {
-    Warn("Actual persons: ", agents.agents_size(), " -> ", index);
+  if (index < agents.persons_size()) {
+    Warn("Actual persons: ", agents.persons_size(), " -> ", index);
   }
   persons.size = index;
   CHECK;

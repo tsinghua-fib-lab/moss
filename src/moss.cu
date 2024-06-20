@@ -160,11 +160,11 @@ void Moss::Init(const Config& config_) {
     Info("Road: ", map.roads_size());
     Info("Junction: ", map.junctions_size());
     Info("AOI: ", map.aois_size());
-    Info("Person: ", agents.agents_size());
+    Info("Person: ", agents.persons_size());
   }
 
   // 更新上限
-  config.agent_limit = min(config.agent_limit, agents.agents_size());
+  config.agent_limit = min(config.agent_limit, agents.persons_size());
 
   // 初始化各类模拟对象
   {

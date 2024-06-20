@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-moss"
-version = "0.3.6"
+version = "0.4.0"
 description = "MObility Simulation System"
 authors = [
   { name = "Wenxuan Ao", email = "aowx21@outlook.com" },
