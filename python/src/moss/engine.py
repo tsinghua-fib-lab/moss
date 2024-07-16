@@ -145,7 +145,7 @@ class Engine:
         lane_veh_add_buffer_size: int = 1000,
         lane_veh_remove_buffer_size: int = 1000,
         speed_stat_interval=0,
-        enable_output=False,
+        enable_output=True, # TODO: fix the segfault when set to False
         out_xmin=-1e999,
         out_ymin=-1e999,
         out_xmax=1e999,
