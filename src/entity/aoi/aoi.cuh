@@ -2,6 +2,7 @@
 #define SRC_ENTITY_AOI_AOI_CUH_
 
 #include <vector>
+#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "containers/vector.cuh"
 #include "entity/aoi/crowd/crowd.cuh"
@@ -60,6 +61,13 @@ struct Data {
   int b_prepare, b_update;
 
   void Init(Moss* S, const PbMap&);
+  inline Aoi* At(uint id) {
+    auto iter = aoi_map.find(id);
+    if (iter == aoi_map.end()) {
+      throw std::range_error(fmt::format("aoi {} not found", id));
+    }
+    return iter->second;
+  }
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<AoiCheckpoint>&);

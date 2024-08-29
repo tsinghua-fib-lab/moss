@@ -25,7 +25,7 @@ void Data::Init(Moss* S, const PbMap& map) {
       double s = 0;
       uint index = 0;
       for (auto& i : pb.lane_ids()) {
-        auto* l = r.lanes[index++] = S->lane.lane_map.at(i);
+        auto* l = r.lanes[index++] = S->lane.At(i);
         l->parent_is_road = true;
         // 除了0号车道外都需要更新支链
         l->need_side_update = index != 1;
@@ -65,8 +65,8 @@ void Data::Init(Moss* S, const PbMap& map) {
         for (auto& pb : pb.next_road_lanes()) {
           r.next_road_lanes[j++] = {
               .id = unsigned(pb.road_id()),
-              .l1 = S->lane.lane_map.at(pb.lane_id_a()),
-              .l2 = S->lane.lane_map.at(pb.lane_id_b()) + 1};
+              .l1 = S->lane.At(pb.lane_id_a()),
+              .l2 = S->lane.At(pb.lane_id_b()) + 1};
         }
       }
       r.nrl_a = 0;

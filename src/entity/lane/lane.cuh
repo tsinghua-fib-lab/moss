@@ -3,6 +3,7 @@
 
 #include <utility>
 #include <vector>
+#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "containers/vector.cuh"
 #include "protos.h"
@@ -114,6 +115,13 @@ struct Data {
 
   void Init(Moss* S, const PbMap&);
   void InitSizes(Moss* S);
+  inline Lane* At(uint id) {
+    auto iter = lane_map.find(id);
+    if (iter == lane_map.end()) {
+      throw std::range_error(fmt::format("lane {} not found", id));
+    }
+    return iter->second;
+  }
   void PrepareAsync(cudaStream_t stream);
   void UpdateAsync();
   void Save(std::vector<LaneCheckpoint>&);

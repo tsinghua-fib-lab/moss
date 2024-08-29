@@ -3,6 +3,7 @@
 
 #include <map>
 #include <vector>
+#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "containers/vector.cuh"
 #include "entity/aoi/crowd/crowd.cuh"
@@ -205,6 +206,13 @@ struct Data {
   int b_prepare, b_update;
 
   void Init(Moss* S, const PbAgents&, uint);
+  inline Person* At(uint id) {
+    auto iter = person_map.find(id);
+    if (iter == person_map.end()) {
+      throw std::range_error(fmt::format("person {} not found", id));
+    }
+    return iter->second;
+  }
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<PersonCheckpoint>&);

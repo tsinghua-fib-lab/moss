@@ -87,19 +87,19 @@ void Data::worker() {
           res.veh = v;
           auto& r = v->route;
           auto& rids = pb_res.journeys(0).driving().road_ids();
-          v->start_lane = S->road.road_map.at(rids[0])->right_driving_lane;
+          v->start_lane = S->road.At(rids[0])->right_driving_lane;
           uint n = rids.size();
           r.New(S->mem, n);
           for (int i = 0; i < n; ++i) {
             r[i] = rids[i];
           }
-          v->end_lane = S->road.road_map.at(rids[n - 1])->right_driving_lane;
+          v->end_lane = S->road.At(rids[n - 1])->right_driving_lane;
           auto& d = v->distance_to_end;
           d.New(S->mem, 2 * n - 1);
           for (int i = n - 2; i >= 0; --i) {
             uint nr = rids[i + 1];
             bool check = false;
-            for (auto* l : S->road.road_map.at(rids[i])->lanes) {
+            for (auto* l : S->road.At(rids[i])->lanes) {
               if (l->type == LaneType::LANE_TYPE_DRIVING) {
                 for (auto& ll : l->successors) {
                   if (ll.lane->next_road_id == nr) {
@@ -120,7 +120,7 @@ void Data::worker() {
           }
           double s;
           if (req.end.is_aoi) {
-            Aoi* a = v->end_aoi = S->aoi.aoi_map.at(req.end.id);
+            Aoi* a = v->end_aoi = S->aoi.At(req.end.id);
             bool check = false;
             for (auto& g : a->driving_gates) {
               if (g.lane == v->end_lane) {
@@ -153,13 +153,13 @@ void Data::worker() {
           uint index = 0;
           for (auto& pb : pb) {
             auto& s = r[index++];
-            s.lane = S->lane.lane_map.at(pb.lane_id());
+            s.lane = S->lane.At(pb.lane_id());
             s.dir = pb.moving_direction();
           }
           bool check = false;
           auto* l = r.back().lane;
           auto* a = p->end_aoi =
-              S->aoi.aoi_map.at(pb_req.end().aoi_position().aoi_id());
+              S->aoi.At(pb_req.end().aoi_position().aoi_id());
           for (auto& g : a->walking_gates) {
             if (g.lane == l) {
               p->end_s = g.s;

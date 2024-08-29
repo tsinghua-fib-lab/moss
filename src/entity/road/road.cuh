@@ -1,6 +1,7 @@
 #ifndef SRC_ENTITY_ROAD_ROAD_CUH_
 #define SRC_ENTITY_ROAD_ROAD_CUH_
 
+#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "protos.h"
 
@@ -44,6 +45,13 @@ struct Data {
   float k_status;  // 平滑系数
 
   void Init(Moss* S, const PbMap&);
+  inline Road* At(uint id) {
+    auto iter = road_map.find(id);
+    if (iter == road_map.end()) {
+      throw std::range_error(fmt::format("road {} not found", id));
+    }
+    return iter->second;
+  }
   void Save(std::vector<RoadCheckpoint>&);
   void Load(const std::vector<RoadCheckpoint>&);
 };

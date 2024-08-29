@@ -71,6 +71,15 @@ __device__ bool Person::NextTrip(float time) {
 void ProcessPredefinedRoute(Moss* S, Person& p, const PbPosition& home,
                             routing::Response& res, const PbSchedule& pb) {
   res.ok = res.ready = res.is_veh = true;
+  if (pb.trips().size() == 0) {
+    Fatal("Error: person ", p.id, " has no trips.");
+  }
+  if (pb.trips(0).routes().size() == 0) {
+    Fatal("Error: person ", p.id, " has no pre-defined routes, please use mosstool.trip.route.pre_route or mosstool.trip.gmns.STA to pre-compute the route.");
+  }
+  if (pb.trips(0).routes(0).driving().road_ids().size() == 0) {
+    Fatal("Error: person ", p.id, "'s route has no road ids.");
+  }
   auto& rids = pb.trips(0).routes(0).driving().road_ids();
   auto* v = S->mem->MValueZero<routing::VehicleRoute>();
   res.veh = v;
@@ -84,7 +93,7 @@ void ProcessPredefinedRoute(Moss* S, Person& p, const PbPosition& home,
   d.New(S->mem, 2 * n - 1);
   auto& end = pb.trips(0).end();
   if (end.has_aoi_position()) {
-    Aoi* a = v->end_aoi = S->aoi.aoi_map.at(end.aoi_position().aoi_id());
+    Aoi* a = v->end_aoi = S->aoi.At(end.aoi_position().aoi_id());
     auto road_id = rids[n - 1];
     bool flag = false;
     for (auto& g : a->driving_gates) {
@@ -103,14 +112,14 @@ void ProcessPredefinedRoute(Moss* S, Person& p, const PbPosition& home,
     }
   } else if (end.has_lane_position()) {
     v->end_s = end.lane_position().s();
-    v->end_lane = S->lane.lane_map.at(end.lane_position().lane_id());
+    v->end_lane = S->lane.At(end.lane_position().lane_id());
     v->end_lane->GetPosition(v->end_s, v->end_x, v->end_y);
   } else {
     Fatal("Error: person ", p.id,
           "has neither aoi_position nor lane position for end.");
   }
   if (home.has_aoi_position()) {
-    auto* a = S->aoi.aoi_map.at(home.aoi_position().aoi_id());
+    auto* a = S->aoi.At(home.aoi_position().aoi_id());
     auto road_id = rids[0];
     auto flag = false;
     for (auto& g : a->driving_gates) {
@@ -126,7 +135,7 @@ void ProcessPredefinedRoute(Moss* S, Person& p, const PbPosition& home,
     }
   } else if (home.has_lane_position()) {
     p.runtime.status = PersonStatus::TO_INSERT;
-    p.runtime.lane = S->lane.lane_map.at(home.lane_position().lane_id());
+    p.runtime.lane = S->lane.At(home.lane_position().lane_id());
     p.runtime.s = home.lane_position().s();
     p.start_time = pb.departure_time();
   } else {
@@ -136,7 +145,7 @@ void ProcessPredefinedRoute(Moss* S, Person& p, const PbPosition& home,
   for (int i = n - 2; i >= 0; --i) {
     uint nr = rids[i + 1];
     bool reachable = false;
-    for (auto* l : S->road.road_map.at(rids[i])->lanes) {
+    for (auto* l : S->road.At(rids[i])->lanes) {
       if (l->type == LaneType::LANE_TYPE_DRIVING) {
         for (auto& ll : l->successors) {
           if (ll.lane->next_road_id == nr) {

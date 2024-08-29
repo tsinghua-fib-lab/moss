@@ -451,7 +451,7 @@ void Data::Init(Moss* S, const PbMap& map) {
       uint index = 0;
       for (auto& i : pb.predecessors()) {
         auto& p = l.predecessors[index++];
-        p.lane = lane_map.at(i.id());
+        p.lane = At(i.id());
         p.type = i.type();
       }
     }
@@ -463,7 +463,7 @@ void Data::Init(Moss* S, const PbMap& map) {
       uint index = 0;
       for (auto& i : pb.successors()) {
         auto& p = l.successors[index++];
-        p.lane = lane_map.at(i.id());
+        p.lane = At(i.id());
         p.type = i.type();
       }
     }
@@ -476,7 +476,7 @@ void Data::Init(Moss* S, const PbMap& map) {
       uint index = 0;
       for (auto& o : pb.overlaps()) {
         auto& p = l.overlaps[index++];
-        p.other = lane_map.at(o.self().lane_id());
+        p.other = At(o.self().lane_id());
         p.other_s = o.other().s();
         p.self_first = o.self_first();
       }

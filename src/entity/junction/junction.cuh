@@ -2,6 +2,7 @@
 #define SRC_ENTITY_JUNCTION_JUNCTION_CUH_
 
 #include <vector>
+#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "entity/junction/trafficlight/trafficlight.cuh"
 #include "entity/lane/lane.cuh"
@@ -47,6 +48,13 @@ struct Data {
   int b_prepare, b_update;
 
   void Init(Moss* S, const PbMap&);
+  inline Junction* At(uint id) {
+    auto iter = junction_map.find(id);
+    if (iter == junction_map.end()) {
+      throw std::range_error(fmt::format("junction {} not found", id));
+    }
+    return iter->second;
+  }
   void PrepareAsync();
   void UpdateAsync();
   void Save(std::vector<JunctionCheckpoint>&);

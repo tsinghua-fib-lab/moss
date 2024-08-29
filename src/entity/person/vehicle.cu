@@ -172,7 +172,7 @@ void Data::SetRoute(int person_index, std::vector<int> route, int end_lane_id,
   }
   Lane* end_lane;
   if (end_lane_id == -1) {
-    end_lane = S->road.road_map.at(route[route.size() - 1])->right_driving_lane;
+    end_lane = S->road.At(route[route.size() - 1])->right_driving_lane;
     if (!end_lane) {
       throw std::invalid_argument(fmt::format(
           "Road {} does not have a drivable lane", route[route.size() - 1]));
@@ -206,7 +206,7 @@ void Data::SetRoute(int person_index, std::vector<int> route, int end_lane_id,
   for (int i = n - 2; i >= 0; --i) {
     uint nr = route[i + 1];
     bool reachable = false;
-    for (auto* l : S->road.road_map.at(route[i])->lanes) {
+    for (auto* l : S->road.At(route[i])->lanes) {
       if (l->type == LaneType::LANE_TYPE_DRIVING) {
         for (auto& ll : l->successors) {
           if (ll.lane->next_road_id == nr) {

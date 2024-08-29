@@ -48,10 +48,11 @@ size_t Moss::Save() {
 }
 
 void Moss::Load(size_t id) {
-  if (checkpoints.find(id) == checkpoints.end()) {
+  auto iter = checkpoints.find(id);
+  if (iter == checkpoints.end()) {
     throw std::range_error("Specified checkpoint does not exist.");
   }
-  auto* p = checkpoints.at(id);
+  auto* p = iter->second;
   step = p->step;
   time = p->time;
   person.M->veh_cnt = p->veh_cnt;

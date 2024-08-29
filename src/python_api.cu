@@ -642,7 +642,7 @@ class Engine {
   }
   auto debug_vehicle_full(uint id) {
 #define ID(x) ((x) ? int((x)->id) : -1)
-    auto& p = *S.person.person_map.at(id);
+    auto& p = *S.person.At(id);
     std::vector<uint> route;
     p.route.veh->route.Save(route);
     return std::make_tuple(

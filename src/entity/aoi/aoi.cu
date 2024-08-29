@@ -276,7 +276,7 @@ void Data::Init(Moss* S, const PbMap& map) {
       uint index = 0;
       for (auto& p : pb.walking_positions()) {
         auto& o = a.walking_gates[index];
-        o.lane = S->lane.lane_map.at(p.lane_id());
+        o.lane = S->lane.At(p.lane_id());
         o.s = min(p.s(), max(0.f, o.lane->length - 1));
         o.observation = nullptr;
         auto& q = pb.walking_gates(index);
@@ -291,7 +291,7 @@ void Data::Init(Moss* S, const PbMap& map) {
       uint index = 0;
       for (auto& p : pb.driving_positions()) {
         auto& o = a.driving_gates[index];
-        o.lane = S->lane.lane_map.at(p.lane_id());
+        o.lane = S->lane.At(p.lane_id());
         o.s = min(p.s(), max(0.f, o.lane->length - 1));
         observers[p.lane_id()].push_back({o.s, &o});
         auto& q = pb.driving_gates(index);
@@ -322,7 +322,7 @@ void Data::Init(Moss* S, const PbMap& map) {
   }
   // 为所有aoi的开车出口登记lane上的观测点
   for (auto&& [lane_id, sas] : observers) {
-    auto* l = S->lane.lane_map.at(lane_id);
+    auto* l = S->lane.At(lane_id);
     std::sort(sas.begin(), sas.end(),
               [](std::pair<float, AoiGate*>& a, std::pair<float, AoiGate*>& b) {
                 return a.first < b.first;

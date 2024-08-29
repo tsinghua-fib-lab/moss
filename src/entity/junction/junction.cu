@@ -276,7 +276,7 @@ void Data::Init(Moss* S, const PbMap& map) {
     {
       uint index = 0;
       for (auto& pb : pb.lane_ids()) {
-        auto* l = j.lanes[index++] = S->lane.lane_map.at(pb);
+        auto* l = j.lanes[index++] = S->lane.At(pb);
         l->parent_junction = &j;
         if (l->type == LaneType::LANE_TYPE_DRIVING) {
           assert(l->predecessors.size == 1);

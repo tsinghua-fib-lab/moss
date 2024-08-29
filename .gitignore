@@ -1,4 +1,5 @@
 # Custom
+data/
 *.egg-info
 dist/
 .venv/
