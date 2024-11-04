@@ -34,3 +34,12 @@ pip install python-moss
 Q1: How to resolve the error `ImportError: /.../libstdc++.so.6: version 'GLIBCXX_3.4.30' not found`?
 
 A1: Run `conda install -c conda-forge libstdcxx-ng=12` in the current conda environment.
+
+## V1.0.0 Roadmap
+
+- better vehicle model with our best practices
+- linked-list based add/remove buffer to avoid some bug about the size of array
+- AVRO based output
+- a moss-ui project to show the simulation result locally by WebGL
+- cityproto V2
+- better documentation with pdoc website
