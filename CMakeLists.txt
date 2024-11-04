@@ -46,7 +46,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   cityproto
   GIT_REPOSITORY https://github.com/tsinghua-fib-lab/cityproto
-  GIT_TAG v1.13.3
+  GIT_TAG v1.25.1
 )
 set(FETCHCONTENT_QUIET OFF)
 set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "")

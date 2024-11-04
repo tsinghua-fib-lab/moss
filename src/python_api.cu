@@ -45,7 +45,7 @@ class Engine {
          float mobil_lc_forbidden_distance, uint lane_veh_add_buffer_size,
          uint lane_veh_remove_buffer_size, float speed_stat_interval,
          bool enable_output, float out_xmin, float out_ymin, float out_xmax,
-         float out_ymax, uint device)
+         float out_ymax, uint device, float device_mem)
       : S() {
     S.is_python_api = true;
     S.Init({.map_file = map_file,
@@ -76,7 +76,8 @@ class Engine {
             .mobil_lc_forbidden_distance = mobil_lc_forbidden_distance,
             .lane_veh_add_buffer_size = lane_veh_add_buffer_size,
             .lane_veh_remove_buffer_size = lane_veh_remove_buffer_size,
-            .device = device});
+            .device = device,
+            .device_mem = device_mem});
   }
   // 获取地图投影
   std::string get_map_projection() { return S.map_projection; }
@@ -748,7 +749,8 @@ PYBIND11_MODULE(_moss, m) {
       .def_readonly_static("__version__", &VER)
       .def(py::init<const std::string&, const std::string&, uint, float, int,
                     int, int, bool, bool, int, float, float, uint, float, uint,
-                    uint, float, bool, float, float, float, float, uint>(),
+                    uint, float, bool, float, float, float, float, uint,
+                    float>(),
            "map_file"_a, "agent_file"_a, "start_step"_a, "step_interval"_a = 1,
            "seed"_a = 43, "verbose_level"_a = 0, "agent_limit"_a = -1,
            "disable_aoi_out_control"_a = false, "disable_junction"_a = false,
@@ -758,7 +760,8 @@ PYBIND11_MODULE(_moss, m) {
            "lane_veh_add_buffer_size"_a = 300,
            "lane_veh_remove_buffer_size"_a = 300, "speed_stat_interval"_a = 0,
            "enable_output"_a = false, "out_xmin"_a = 0, "out_ymin"_a = 0,
-           "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0, no_gil())
+           "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0,
+           "device_mem"_a = 0, no_gil())
       .def("next_step", &Engine::next_step, "n"_a = 1, no_gil())
       .def("get_map_projection", &Engine::get_map_projection, no_gil())
       .def("get_map_bbox", &Engine::get_map_bbox, no_gil())

@@ -151,6 +151,7 @@ class Engine:
         out_xmax=1e999,
         out_ymax=1e999,
         device: int = 0,
+        device_mem: float = 0,
     ):
         assert junction_yellow_time >= 0
         if not hasattr(_thread_local, "device"):
@@ -186,6 +187,7 @@ class Engine:
             out_xmax,
             out_ymax,
             device,
+            device_mem,
         )
         self.map_file = map_file
         self.agent_file = agent_file

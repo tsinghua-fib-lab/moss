@@ -1,4 +1,6 @@
 # Custom
+_*
+log/
 data/
 *.egg-info
 dist/

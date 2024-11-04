@@ -48,6 +48,8 @@ struct Config {
   uint lane_veh_remove_buffer_size;
   // CUDA设备ID
   uint device;
+  // 显存占用大小（单位GiB）
+  float device_mem;
 };
 
 // 用于恢复模拟器状态的记录

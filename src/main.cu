@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
       .lane_veh_remove_buffer_size =
           (uint)cfg["lane_remove_buffer_size"].as<int>(),
       .device = (uint)cfg["device"].as<int>(),
+      .device_mem = cfg["device_mem"].as<float>(),
   });
   t_init = Time() - t_init;
   auto tl_policy = (moss::TlPolicy)cfg["junction_tl_policy"].as<int>();

@@ -87,7 +87,17 @@ void Moss::Init(const Config& config_) {
   // 初始化内存池
   {
     Tag _("Mem Init", 0);
-    mem = MemManager::New(20_GiB, config.device, verbose);
+    size_t size;
+    if (config.device_mem <= 0) {
+      // 自动分配（按剩余显存的80%分配）
+      size_t free, total;
+      CUCHECK(cudaMemGetInfo(&free, &total));
+      size = size_t(free * 0.8);
+    } else {
+      size = size_t(config.device_mem * 1024 * 1024 * 1024);
+    }
+    Info("Using ", size / 1024 / 1024 / 1024, "GB memory");
+    mem = MemManager::New(size, config.device, verbose);
   }
   if (config.n_workers == 0) {
     config.n_workers = get_nprocs();
