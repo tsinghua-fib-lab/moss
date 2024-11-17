@@ -1,42 +1,13 @@
 import io
 from typing import Iterator, Optional
 
-import numpy as np
 import psycopg2
 import pyproj
 from tqdm import tqdm
 
 from .engine import Engine
 
-
-class Recorder:
-    """
-    Recorder is for local visualization and writes to a local file
-    """
-
-    def __init__(self, eng: Engine, enable=True):
-        self.enable = enable
-        if not enable:
-            return
-        self.eng = eng
-        self.data = {
-            'lanes': eng.get_lane_geoms(),
-            'steps': []
-        }
-
-    def record(self):
-        if not self.enable:
-            return
-        self.data['steps'].append({
-            'veh_id_positions': self.eng.get_vehicle_id_positions().astype(np.float32),
-            'lane_states': self.eng.get_lane_statuses(),
-        })
-
-    def save(self, filepath):
-        if not self.enable:
-            return
-        np.savez_compressed(filepath, data=self.data)
-
+__all__ = ["DBRecorder"]
 
 class StringIteratorIO(io.TextIOBase):
     def __init__(self, iter: Iterator[str]):
@@ -77,30 +48,97 @@ class StringIteratorIO(io.TextIOBase):
 class DBRecorder:
     """
     DBRecorder is for web visualization and writes to Postgres Database
+
+    The table schema is as follows:
+    - meta_simple: The metadata of the simulation.
+        - name: The name of the simulation.
+        - start: The start step of the simulation.
+        - steps: The total steps of the simulation.
+        - time: The time of the simulation.
+        - total_agents: The total agents of the simulation.
+        - map: The map of the simulation.
+        - min_lng: The minimum longitude of the simulation.
+        - min_lat: The minimum latitude of the simulation.
+        - max_lng: The maximum longitude of the simulation.
+        - max_lat: The maximum latitude of the simulation.
+        - road_status_v_min: The minimum speed of the road status.
+        - road_status_interval: The interval of the road status.
+    - {output_name}_s_cars: The vehicles of the simulation.
+        - step: The step of the simulation.
+        - id: The id of the vehicle.
+        - parent_id: The parent id of the vehicle.
+        - direction: The direction of the vehicle.
+        - lng: The longitude of the vehicle.
+        - lat: The latitude of the vehicle.
+        - model: The model of the vehicle.
+        - z: The z of the vehicle.
+        - pitch: The pitch of the vehicle.
+        - v: The speed of the vehicle.
+    - {output_name}_s_people: The people of the simulation.
+        - step: The step of the simulation.
+        - id: The id of the people.
+        - parent_id: The parent id of the people.
+        - direction: The direction of the people.
+        - lng: The longitude of the people.
+        - lat: The latitude of the people.
+        - z: The z of the people.
+        - v: The speed of the people.
+        - model: The model of the people.
+    - {output_name}_s_traffic_light: The traffic lights of the simulation.
+        - step: The step of the simulation.
+        - id: The id of the traffic light.
+        - state: The state of the traffic light.
+        - lng: The longitude of the traffic light.
+        - lat: The latitude of the traffic light.
+    - {output_name}_s_road: The road status of the simulation.
+        - step: The step of the simulation.
+        - id: The id of the road.
+        - level: The level of the road.
+        - v: The speed of the road.
+        - in_vehicle_cnt: The in vehicle count of the road.
+        - out_vehicle_cnt: The out vehicle count of the road.
+        - cnt: The count of the road.
+
+    The index of the table is as follows:
+    - {output_name}_s_cars: (step, lng, lat)
+    - {output_name}_s_people: (step, lng, lat)
+    - {output_name}_s_traffic_light: (step, lng, lat)
+    - {output_name}_s_road: (step)
     """
 
     def __init__(self, eng: Engine):
-        assert eng.enable_output
+        """
+        Args:
+        - eng: The engine to be recorded.
+        """
         self.eng = eng
-        self.vehs = []
-        self.peds = []
-        self.tls = []
-        self.xys = []
         self.data = []
 
     def record(self):
+        """
+        Record the data of the engine.
+        """
         self.data.append([
             self.eng._e.get_current_step(),
             self.eng._e.get_output_vehicles(),
             self.eng._e.get_output_tls(),
         ])
 
-    def save(self, db_url: str, mongo_map: str, output_name: str, batch_size=1000, use_tqdm=False):
+    def save(self, db_url: str, mongo_map: str, output_name: str, use_tqdm=False):
+        """
+        Save the data to the Postgres Database.
+
+        Args
+        - db_url: The URL of the Postgres Database.
+        - mongo_map: The map path of the simulation in mongodb (if you use mongodb). The format is like {db}.{coll}.
+        - output_name: The name of the simulation that will be saved to the database.
+        - use_tqdm: Whether to use tqdm or not.
+        """
         vehs = []
         tls = []
         xs = []
         ys = []
-        proj = pyproj.Proj(self.eng._e.get_map_projection())
+        proj = pyproj.Proj(self.eng._map.header.projection)
         for step, (vs, vx, vy), (ts, tx, ty) in self.data:
             if vs:
                 x, y = proj(vx, vy, True)
@@ -115,12 +153,12 @@ class DBRecorder:
         if xs:
             min_lon, max_lon, min_lat, max_lat = min(xs), max(xs), min(ys), max(ys)
         else:
-            x1, y1, x2, y2 = self.eng._e.get_map_bbox()
+            x1, y1, x2, y2 = self.eng._map_bbox
             min_lon,  min_lat = proj(x1, y1, True)
             max_lon,  max_lat = proj(x2, y2, True)
         with psycopg2.connect(db_url) as conn:
             with conn.cursor() as cur:
-                # 创建表格
+                # create table meta_simple
                 cur.execute("""
                 CREATE TABLE IF NOT EXISTS public.meta_simple (
                     "name" text NOT NULL,
@@ -141,15 +179,18 @@ class DBRecorder:
                 conn.commit()
 
                 # 删除指定记录
+                # delete from public.meta_simple where name='output_name';
                 cur.execute(f"DELETE FROM public.meta_simple WHERE name='{output_name}';")
                 conn.commit()
 
                 # 插入新记录
+                # insert into public.meta_simple values ('output_name', 0, 1000, 1, 1, 'map', 0, 0, 1, 1, 0, 300);
                 cur.execute(
                     f"INSERT INTO public.meta_simple VALUES ('{output_name}', {self.eng.start_step}, {len(self.data)}, 1, 1, '{mongo_map}', {min_lon}, {min_lat}, {max_lon}, {max_lat}, 0, 300);")
                 conn.commit()
 
                 # 删除表格
+                # drop table if exists public.output_name_s_cars;
                 cur.execute(f"DROP TABLE IF EXISTS public.{output_name}_s_cars;")
                 cur.execute(f"DROP TABLE IF EXISTS public.{output_name}_s_people;")
                 cur.execute(
@@ -159,6 +200,7 @@ class DBRecorder:
                 conn.commit()
 
                 # 创建表格
+                # create table public.output_name_s_cars
                 cur.execute(
                     f"""
                 CREATE TABLE public.{output_name}_s_cars (
@@ -181,6 +223,7 @@ class DBRecorder:
                 conn.commit()
 
                 # 创建表格
+                # create table public.output_name_s_people
                 cur.execute(
                     f"""
                 CREATE TABLE public.{output_name}_s_people (
@@ -202,6 +245,7 @@ class DBRecorder:
                 conn.commit()
 
                 # 创建表格
+                # create table public.output_name_s_traffic_light
                 cur.execute(
                     f"""
                 CREATE TABLE public.{output_name}_s_traffic_light (
@@ -219,6 +263,7 @@ class DBRecorder:
                 conn.commit()
 
                 # 创建表格
+                # create table public.output_name_s_road
                 cur.execute(
                     f"""
                 CREATE TABLE public.{output_name}_s_road (

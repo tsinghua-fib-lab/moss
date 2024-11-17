@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "TlOutput",
+  "fields": [
+    {
+      "name": "t",
+      "type": "float"
+    },
+    {
+      "name": "id",
+      "type": "int"
+    },
+    {
+      "name": "state",
+      "type": "int"
+    }
+  ]
+}

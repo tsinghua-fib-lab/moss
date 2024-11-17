@@ -23,7 +23,6 @@ add_executable(moss
   main.cu
   containers/vector.cu
   entity/aoi/aoi.cu
-  entity/aoi/crowd/crowd.cu
   entity/junction/junction.cu
   entity/junction/trafficlight/trafficlight.cu
   entity/lane/lane.cu
@@ -32,14 +31,13 @@ add_executable(moss
   entity/person/pedestrian.cu
   entity/road/road.cu
   mem/mem.cu
-  output.cu
-  rpc/routing.cu
   moss.cu
   utils/color_print.cc
   utils/debug.cu
   utils/geometry.cu
   utils/timer.cc
   utils/utils.cu
+  output/output.cu
 )
 set_target_properties(moss PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
@@ -57,6 +55,7 @@ target_link_libraries(moss
   PRIVATE argparse
   PRIVATE fmt
   PRIVATE yaml-cpp
+  PRIVATE avrocpp
 )
 target_compile_definitions(moss PRIVATE VERSION="build.${DATE}")
 
@@ -64,7 +63,6 @@ pybind11_add_module(_moss
   python_api.cu
   containers/vector.cu
   entity/aoi/aoi.cu
-  entity/aoi/crowd/crowd.cu
   entity/junction/junction.cu
   entity/junction/trafficlight/trafficlight.cu
   entity/lane/lane.cu
@@ -73,14 +71,13 @@ pybind11_add_module(_moss
   entity/person/pedestrian.cu
   entity/road/road.cu
   mem/mem.cu
-  output.cu
-  rpc/routing.cu
   moss.cu
   utils/color_print.cc
   utils/debug.cu
   utils/geometry.cu
   utils/timer.cc
   utils/utils.cu
+  output/output.cu
 )
 set_target_properties(_moss PROPERTIES
   CUDA_SEPARABLE_COMPILATION ON
@@ -95,6 +92,7 @@ target_link_libraries(_moss
   PRIVATE cityproto
   PRIVATE CUDA::nvToolsExt
   PRIVATE fmt
+  PRIVATE avrocpp
 )
 target_compile_definitions(_moss PRIVATE VERSION="build.${DATE}")
 target_include_directories(_moss PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

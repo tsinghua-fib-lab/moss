@@ -5,38 +5,6 @@
 #include <cassert>
 #include "utils/macro.h"
 
-// 找到首个不小于target的值的偏移量，返回size表示没找到
-template <typename T>
-__host__ __device__ uint32_t LowerBound(const T* array, uint32_t size,
-                                        const T& target) {
-  uint32_t imin = 0, imax = size;
-  while (imax > imin) {
-    auto imid = (imax + imin) >> 1;
-    if (array[imid] < target) {
-      imin = imid + 1;
-    } else {
-      imax = imid;
-    }
-  }
-  return imin;
-}
-
-// 找到首个大于target的值的偏移量，返回size表示没找到
-template <typename T>
-__host__ __device__ uint32_t UpperBound(const T* array, uint32_t size,
-                                        const T& target) {
-  uint32_t imin = 0, imax = size;
-  while (imax > imin) {
-    auto imid = (imax + imin) >> 1;
-    if (array[imid] <= target) {
-      imin = imid + 1;
-    } else {
-      imax = imid;
-    }
-  }
-  return imin;
-}
-
 template <typename T>
 __host__ __device__ T Clamp(const T& val, const T& lo, const T& hi) {
   return (val < lo) ? lo : (hi < val) ? hi : val;
@@ -58,11 +26,13 @@ __device__ void Max_(T& a, const T& b) {
 }
 
 // 返回自己是否是mask中的第一个
+// return true if the current CUDA thread is the first one in the mask
 __device__ __forceinline__ bool IsLeader(uint mask) {
   return (mask & ~((1 << (WARP_ID + 1)) - 1)) == 0;
 }
 
 // 返回自己是否是Warp活动线程中的第一个
+// return true if the current CUDA thread is the first one in the warp
 __device__ __forceinline__ bool IsWarpLeader() {
   return IsLeader(__activemask());
 }
@@ -82,28 +52,14 @@ __device__ T* atomicLoad(T** addr) {
 cudaStream_t NewStream();
 
 template <class U, class V>
-__device__ __host__ U min(U u, V v) {
+__host__ __device__ U min(U u, V v) {
   return u <= v ? u : v;
 }
 
 template <class U, class V>
-__device__ __host__ U max(U u, V v) {
+__host__ __device__ U max(U u, V v) {
   return u >= v ? u : v;
 }
-
-// 自动配置kernel运行的grid和block大小
-// template <class Func, class... Args>
-// void Launch(uint size, cudaStream_t stream, Func func, Args&&... args) {
-//   int grid_size, block_size;
-//   if (!size) {
-//     return;
-//   }
-//   CUCHECK(cudaOccupancyMaxPotentialBlockSize(&grid_size, &block_size,
-//                                              (void*)func, 0, size));
-//   // printf("Suggestion: <%d,%d>\n", grid_size, block_size);
-//   grid_size = (size + block_size - 1) / block_size;
-//   func<<<grid_size, block_size, 0, stream>>>(std::forward<Args>(args)...);
-// }
 
 template <class Func>
 void SetGridBlockSize(Func func, int size, int sm_count, int& grid_size,
@@ -124,7 +80,7 @@ void PrintMem();
 
 // 二分查找 arr[i-1]<=x<arr[i]，i=0~n
 template <class T>
-__device__ __host__ uint Search(T* arr, uint n, T x) {
+__host__ __device__ uint Search(T* arr, uint n, T x) {
   uint i = 0, j = n;
   while (i < j) {
     uint m = (i + j) >> 1;
@@ -150,25 +106,6 @@ __device__ void ListRemove(T* x, T*& head) {
   }
 }
 
-// 从指针数组中构建链表
-template <class T>
-__device__ void ListLink(T** start, T** end) {
-  if (start == end) {
-    return;
-  }
-  (**start).prev = nullptr;
-  --end;
-  (**end).next = nullptr;
-  if (start < end) {
-    (**start).next = start[1];
-    (**end).prev = end[-1];
-    for (auto** p = start + 1; p < end; ++p) {
-      (**p).prev = p[-1];
-      (**p).next = p[1];
-    }
-  }
-}
-
 template <class T>
 __device__ bool ListCheckLoop(T* p) {
   if (p && p->next) {
@@ -189,7 +126,7 @@ __device__ bool ListCheckLoop(T* p) {
 }
 
 template <class T>
-__device__ __host__ void Swap(T& a, T& b) {
+__host__ __device__ void Swap(T& a, T& b) {
   T c(a);
   a = b;
   b = c;

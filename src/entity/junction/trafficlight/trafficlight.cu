@@ -2,7 +2,6 @@
 #include <cassert>
 #include <cstring>
 #include "containers/vector.cuh"
-#include "entity/entity.h"
 #include "entity/junction/junction.cuh"
 #include "entity/junction/trafficlight/trafficlight.cuh"
 #include "entity/lane/lane.cuh"

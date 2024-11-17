@@ -10,6 +10,8 @@
 unsigned long long operator""_GiB(unsigned long long x);
 unsigned long long operator""_MiB(unsigned long long x);
 
+// memory manager for cuda unified memory
+// support static memory allocation only
 struct MemManager {
   unsigned long long _start, _ptr, _size, _usage;
   std::mutex mtx;
@@ -29,26 +31,20 @@ struct MemManager {
   void PrintUsage();
   void PreferCPU();
   void PreferGPU();
-  template <class T>
-  void Malloc(T** x, size_t size) {
-    *x = (T*)_malloc((size + 15) & ~15);
-  }
+
   template <class T>
   void MallocManaged(T** x, size_t size) {
+    // align to 16 bytes
     *x = (T*)_malloc((size + 15) & ~15);
   }
   template <class T>
-  __host__ __device__ void Free(T*) {}
-
-  // 由cudaMalloc分配的值
-  template <class T>
-  T* DValue() {
-    T* t;
-    Malloc(&t, sizeof(T));
-    return t;
+  __host__ __device__ void Free(T* ptr) {
+    if (ptr) {
+      // do nothing
+    }
   }
 
-  // 由cudaMallocManaged分配的值
+  // malloc T on device by cudaMallocManaged
   template <class T>
   T* MValue() {
     T* t;
@@ -75,20 +71,21 @@ struct MemManager {
     MallocManaged(&x, sizeof(T));
   }
 
-  // 由cudaMalloc分配的数组
+  // malloc array on device by cudaMallocManaged
   template <class T>
-  T* DArray(size_t size) {
+  T* MArray(size_t size) {
     T* t;
-    Malloc(&t, size * sizeof(T));
+    MallocManaged(&t, size * sizeof(T));
     return t;
   }
 
+  // malloc array on device by cudaMallocManaged
   template <class T>
-  void DArray(T*& x, size_t size) {
-    Malloc(&x, size * sizeof(T));
+  void MArray(T*& x, size_t size) {
+    MallocManaged(&x, size * sizeof(T));
   }
 
-  // 由cudaMallocManaged分配的数组
+  // malloc array on device by cudaMallocManaged and set to zero
   template <class T>
   T* MArrayZero(size_t size) {
     T* t;
@@ -97,30 +94,9 @@ struct MemManager {
     return t;
   }
 
-  template <class T>
-  void TryFree(T* x) {
-    if (x) {
-      Free(x);
-    }
-  }
-
-  // 释放并重新申请MArray
-  template <class T>
-  void ReMArray(T*& x, size_t size) {
-    TryFree(x);
-    MallocManaged(&x, size * sizeof(T));
-  }
-
   // 全零的MArray
   template <class T>
   void MArrayZero(T*& x, size_t size) {
-    MallocManaged(&x, size * sizeof(T));
-    memset(x, 0, size * sizeof(T));
-  }
-
-  template <class T>
-  void ReMArrayZero(T*& x, size_t size) {
-    TryFree(x);
     MallocManaged(&x, size * sizeof(T));
     memset(x, 0, size * sizeof(T));
   }

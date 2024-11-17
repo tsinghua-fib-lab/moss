@@ -1,0 +1,42 @@
+{
+  "type": "record",
+  "name": "PersonOutput",
+  "fields": [
+    {
+      "name": "t",
+      "type": "float"
+    },
+    {
+      "name": "id",
+      "type": "int"
+    },
+    {
+      "name": "x",
+      "type": "float"
+    },
+    {
+      "name": "y",
+      "type": "float"
+    },
+    {
+      "name": "v",
+      "type": "float"
+    },
+    {
+      "name": "parent_id",
+      "type": "int"
+    },
+    {
+      "name": "direction",
+      "type": "float"
+    },
+    {
+      "name": "model",
+      "type": "string"
+    },
+    {
+      "name": "status",
+      "type": "int"
+    }
+  ]
+}

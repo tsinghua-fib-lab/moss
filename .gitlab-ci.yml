@@ -1,0 +1,21 @@
+variables:
+  # https://setuptools-git-versioning.readthedocs.io/en/stable/ci.html
+  GIT_DEPTH: 0
+  VERSION_REGEX: /^v\d+\.\d+\.\d+.*$/
+
+stages:
+  - build
+
+build-docker-image:
+  # default image of runner with tag dind
+  # image: docker:dind
+  tags:
+    - dind
+  stage: build
+  rules:
+    - if: $CI_COMMIT_TAG =~ $VERSION_REGEX
+  script:
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG} -t ${CI_REGISTRY_IMAGE}:latest .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+    - docker push ${CI_REGISTRY_IMAGE}:latest

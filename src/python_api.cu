@@ -8,6 +8,7 @@
 #include <tuple>
 #include <vector>
 #include "moss.cuh"
+#include "utils/color_print.h"
 #include "utils/macro.h"
 
 namespace py = pybind11;
@@ -37,330 +38,189 @@ class Engine {
   Moss S;
 
  public:
-  Engine(const std::string& map_file, const std::string& agent_file,
-         uint start_step, float step_interval, int seed, int verbose_level,
-         int agent_limit, bool disable_aoi_out_control, bool disable_junction,
-         int junction_blocking_count, float junction_yellow_time,
-         float phase_pressure_coeff, uint lane_change_algorithm,
-         float mobil_lc_forbidden_distance, uint lane_veh_add_buffer_size,
-         uint lane_veh_remove_buffer_size, float speed_stat_interval,
-         bool enable_output, float out_xmin, float out_ymin, float out_xmax,
-         float out_ymax, uint device, float device_mem)
+  Engine(const std::string& name, const std::string& map_file,
+         const std::string& person_file, uint start_step, float step_interval,
+         int seed, int verbose_level, int person_limit,
+         float junction_yellow_time, float phase_pressure_coeff,
+         float speed_stat_interval, const std::string& output_dir,
+         float out_xmin, float out_ymin, float out_xmax, float out_ymax,
+         uint device, float device_mem)
       : S() {
-    S.is_python_api = true;
-    S.Init({.map_file = map_file,
-            .agent_file = agent_file,
-            .agent_limit = uint(agent_limit),
-            .output_file = "",
-            .output_type = enable_output ? "python" : "disable",
-            .speed_stat_interval = speed_stat_interval,
-            .start_step = start_step,
-            .total_step = 1 << 30,
-            .step_interval = step_interval,
-            .routing_url = "",
-            .pre_routing = false,
-            .enable_aoi_indoor = false,
-            .enable_junction = !disable_junction,
-            .seed = seed,
-            .x_min = out_xmin,
-            .y_min = out_ymin,
-            .x_max = out_xmax,
-            .y_max = out_ymax,
-            .verbose_level = verbose_level,
-            .disable_aoi_out_control = disable_aoi_out_control,
-            .n_workers = 0,
-            .junction_blocking_count = uint(junction_blocking_count),
-            .junction_yellow_time = junction_yellow_time,
-            .phase_pressure_coeff = phase_pressure_coeff,
-            .lane_change_algorithm = lane_change_algorithm,
-            .mobil_lc_forbidden_distance = mobil_lc_forbidden_distance,
-            .lane_veh_add_buffer_size = lane_veh_add_buffer_size,
-            .lane_veh_remove_buffer_size = lane_veh_remove_buffer_size,
-            .device = device,
-            .device_mem = device_mem});
-  }
-  // 获取地图投影
-  std::string get_map_projection() { return S.map_projection; }
-  // 获取地图范围
-  auto get_map_bbox() {
-    return std::make_tuple(S.map_west, S.map_south, S.map_east, S.map_north);
+    auto config = Config{
+        .map_file = map_file,
+        .person_file = person_file,
+        .person_limit = uint(person_limit),
+        .speed_stat_interval = speed_stat_interval,
+        .start_step = start_step,
+        .total_step = 1 << 30,
+        .step_interval = step_interval,
+        .seed = seed,
+        .output = {.enable = !output_dir.empty(),
+                   .dir = output_dir,
+                   .tl_file_duration = 60},
+        .x_min = out_xmin,
+        .y_min = out_ymin,
+        .x_max = out_xmax,
+        .y_max = out_ymax,
+        .verbose_level = verbose_level,
+        .n_workers = 0,
+        .junction_yellow_time = junction_yellow_time,
+        .phase_pressure_coeff = phase_pressure_coeff,
+        .device = device,
+        .device_mem = device_mem,
+    };
+    S.Init(name, config);
   }
   // 获取当前步
   int get_current_step() { return S.step; }
   // 获取当前时间
   float get_current_time() { return S.time; }
-  // 获取车辆总数
-  uint get_vehicle_count() { return S.person.persons.size; }
-  // 按顺序获取车辆id列表
-  auto get_vehicle_ids() {
+
+  // get persons' all information as numpy arrays
+  auto fetch_persons() {
+    Info("Call fetch_persons");
+    // define
+    auto* ids = new vec<int>();
+    auto* statuses = new vec<int8_t>();
+    auto* lane_ids = new vec<int>();
+    auto* lane_parent_ids = new vec<int>();
+    auto* ss = new vec<float>();
+    auto* aoi_ids = new vec<int>();
+    auto* vs = new vec<float>();
+    auto* shadow_lane_ids = new vec<int>();
+    auto* shadow_ss = new vec<float>();
+    auto* lc_yaws = new vec<float>();
+    auto* lc_completed_ratios = new vec<float>();
+    auto* is_forwards = new vec<int8_t>();
+    auto* xs = new vec<float>();
+    auto* ys = new vec<float>();
+    auto* dirs = new vec<float>();
+    auto* schedule_indexs = new vec<int>();
+    auto* trip_indexs = new vec<int>();
+    auto* departure_times = new vec<float>();
+    auto* traveling_times = new vec<float>();
+    auto* total_distances = new vec<float>();
+    // reserve space
+    ids->reserve(S.person.persons.size);
+    statuses->reserve(S.person.persons.size);
+    lane_ids->reserve(S.person.persons.size);
+    lane_parent_ids->reserve(S.person.persons.size);
+    ss->reserve(S.person.persons.size);
+    aoi_ids->reserve(S.person.persons.size);
+    vs->reserve(S.person.persons.size);
+    shadow_lane_ids->reserve(S.person.persons.size);
+    shadow_ss->reserve(S.person.persons.size);
+    lc_yaws->reserve(S.person.persons.size);
+    lc_completed_ratios->reserve(S.person.persons.size);
+    is_forwards->reserve(S.person.persons.size);
+    xs->reserve(S.person.persons.size);
+    ys->reserve(S.person.persons.size);
+    dirs->reserve(S.person.persons.size);
+    schedule_indexs->reserve(S.person.persons.size);
+    trip_indexs->reserve(S.person.persons.size);
+    departure_times->reserve(S.person.persons.size);
+    traveling_times->reserve(S.person.persons.size);
+    total_distances->reserve(S.person.persons.size);
+    Info("Call fetch_persons: reserve space");
+    // copy
+    for (auto& p : S.person.persons) {
+      ids->push_back(int(p.id));
+      statuses->push_back((int8_t)p.runtime.status);
+      if (p.runtime.lane) {
+        lane_ids->push_back(p.runtime.lane->id);
+        if (p.runtime.lane->parent_is_road) {
+          lane_parent_ids->push_back(int(p.runtime.lane->parent_road->id));
+        } else {
+          lane_parent_ids->push_back(int(p.runtime.lane->parent_junction->id));
+        }
+      } else {
+        lane_ids->push_back(-1);
+        lane_parent_ids->push_back(-1);
+      }
+      ss->push_back(p.runtime.s);
+      aoi_ids->push_back(p.runtime.aoi ? int(p.runtime.aoi->id) : -1);
+      vs->push_back(p.runtime.v);
+      shadow_lane_ids->push_back(
+          p.runtime.shadow_lane ? int(p.runtime.shadow_lane->id) : -1);
+      shadow_ss->push_back(p.runtime.shadow_s);
+      lc_yaws->push_back(p.runtime.lc_yaw);
+      lc_completed_ratios->push_back(p.runtime.lc_completed_ratio);
+      is_forwards->push_back(p.runtime.is_forward);
+      xs->push_back(p.runtime.x);
+      ys->push_back(p.runtime.y);
+      dirs->push_back(p.runtime.dir);
+      schedule_indexs->push_back(p.schedule_index);
+      trip_indexs->push_back(p.trip_index);
+      departure_times->push_back(p.departure_time);
+      traveling_times->push_back(p.traveling_time);
+      total_distances->push_back(p.total_distance);
+    }
+
+    return std::make_tuple(
+        asarray(ids), asarray(statuses), asarray(lane_ids),
+        asarray(lane_parent_ids), asarray(ss), asarray(aoi_ids), asarray(vs),
+        asarray(shadow_lane_ids), asarray(shadow_ss), asarray(lc_yaws),
+        asarray(lc_completed_ratios), asarray(is_forwards), asarray(xs),
+        asarray(ys), asarray(dirs), asarray(schedule_indexs),
+        asarray(trip_indexs), asarray(departure_times),
+        asarray(traveling_times), asarray(total_distances));
+  }
+
+  auto fetch_lanes() {
+    Info("Call fetch_lanes");
+    // define
+    auto* ids = new vec<int>();
+    auto* statuses = new vec<int8_t>();
+    auto* v_avgs = new vec<float>();
+
+    // reserve space
+    ids->reserve(S.lane.lanes.size);
+    statuses->reserve(S.lane.lanes.size);
+    v_avgs->reserve(S.lane.lanes.size);
+
+    Info("Call fetch_lanes: reserve space");
+
+    // copy
+    for (auto& l : S.lane.lanes) {
+      ids->push_back(int(l.id));
+      // 0: green, 1: yellow, 2: red, 3: restriction
+      statuses->push_back((l.restriction | l.in_restriction)               ? 3
+                          : l.light_state == LightState::LIGHT_STATE_GREEN ? 0
+                          : l.light_state == LightState::LIGHT_STATE_YELLOW
+                              ? 1
+                              : 2);
+      v_avgs->push_back(l.v_avg);
+    }
+
+    return std::make_tuple(asarray(ids), asarray(statuses), asarray(v_avgs));
+  }
+
+  // 获取道路id列表
+  // Get the list of road ids
+  auto get_road_ids() {
+    Info("Call get_road_ids");
     auto* out = new vec<int>();
-    out->reserve(S.person.persons.size);
-    for (auto& p : S.person.persons) {
-      out->push_back(p.id);
+    out->reserve(S.road.roads.size);
+    for (auto& r : S.road.roads) {
+      out->push_back(r.id);
     }
+    Info("Call get_road_ids: return out");
     return asarray(out);
   }
-  // 获取运行中的车辆的位置信息，(x,y,dir)
-  auto get_vehicle_positions() {
-    auto* out = new vec<double>();
-    out->reserve(S.person.M->veh_cnt * 3);
-    for (auto& p : S.person.persons) {
-      if (p.runtime.status == PersonStatus::DRIVING) {
-        // out->push_back(p.runtime.lane->GetPositionDir(p.runtime.s));
-        out->push_back(p.runtime.x);
-        out->push_back(p.runtime.y);
-        out->push_back(p.runtime.dir);
-      }
-    }
-    return asarray(out);
-  }
-  // 获取所有车辆的位置信息，(x,y,dir)
-  auto get_vehicle_positions_all() {
-    auto* out = new vec<double>();
-    out->reserve(S.person.persons.size * 3);
-    for (auto& p : S.person.persons) {
-      out->push_back(p.runtime.x);
-      out->push_back(p.runtime.y);
-      out->push_back(p.runtime.dir);
-    }
-    return asarray(out);
-  }
-  // 获取运行中的车辆的id和位置信息，(id,x,y,dir)
-  auto get_vehicle_id_positions() {
-    auto* out = new vec<double>();
-    out->reserve(S.person.M->veh_cnt * 4);
-    for (auto& p : S.person.persons) {
-      if (p.runtime.status == PersonStatus::DRIVING) {
-        out->push_back(p.id);
-        out->push_back(p.runtime.x);
-        out->push_back(p.runtime.y);
-        out->push_back(p.runtime.dir);
-      }
-    }
-    return asarray(out);
-  }
-  // 获取车辆运行状态，0、1、2表示未运行、运行、结束
-  auto get_vehicle_statuses() {
-    auto* out = new vec<int8_t>();
-    out->reserve(S.person.M->veh_cnt);
-    for (auto& p : S.person.persons) {
-      out->push_back(p.runtime.status == PersonStatus::DRIVING    ? 1
-                     : p.runtime.status == PersonStatus::FINISHED ? 2
-                                                                  : 0);
-    }
-    return asarray(out);
-  }
-  auto get_vehicle_raw_statuses() {
-    auto* out = new vec<int8_t>();
-    out->reserve(S.person.M->veh_cnt);
-    for (auto& p : S.person.persons) {
-      out->push_back((int8_t)p.runtime.status);
-    }
-    return asarray(out);
-  }
-  // 获取车辆加速度、速度、前车距
-  auto get_vehicle_avds() {
-    vec<float> out;
-    out.reserve(get_running_vehicle_count() * 4);
-    for (auto& p : S.person.persons) {
-      if (p.runtime.status == PersonStatus::DRIVING) {
-        out.emplace_back(p.id);
-        out.emplace_back(p.runtime.acc);
-        out.emplace_back(p.runtime.speed);
-        out.emplace_back(p.ahead_dist);
-      }
-    }
-    return out;
-  }
-  // 获取正在运行的车辆数
-  uint get_running_vehicle_count() { return S.person.M->veh_cnt; }
-  // 获取结束的车辆数
-  uint get_finished_vehicle_count() { return S.person.M->finished_cnt; }
-  // 获取结束的车辆的平均旅行时间
-  double get_finished_vehicle_average_traveling_time() {
-    return S.person.M->finished_cnt
-               ? (double)S.person.M->finished_traveling_time /
-                     S.person.M->finished_cnt
-               : NAN;
-  }
-  // 获取车辆旅行或出发时间
-  auto get_vehicle_traveling_or_departure_times() {
-    auto* out = new vec<float>();
-    out->reserve(S.person.M->veh_cnt);
-    for (auto& p : S.person.persons) {
-      out->push_back(p.traveling_or_departure_time);
-    }
-    return asarray(out);
-  }
-  // 获取正在跑的车辆平均旅行时间
-  double get_running_vehicle_average_traveling_time() {
-    return S.person.M->veh_cnt ? S.time + (double)S.person.M->traveling_time /
-                                              S.person.M->veh_cnt
-                               : NAN;
-  }
-  // 获取所有已出发车辆平均旅行时间
-  double get_departed_vehicle_average_traveling_time() {
-    // running+finished
-    auto b = S.person.M->veh_cnt + S.person.M->finished_cnt;
-    if (b) {
-      auto a = (double)S.time * S.person.M->veh_cnt +
-               S.person.M->traveling_time + S.person.M->finished_traveling_time;
-      return a / b;
-    }
-    return NAN;
-  }
-  auto get_vehicle_lanes() {
-    return asarray(
-        new vec<int>(S.person.veh_lane.begin(), S.person.veh_lane.end()));
-  }
-  auto get_vehicle_speeds() {
-    return asarray(
-        new vec<float>(S.person.veh_speed.begin(), S.person.veh_speed.end()));
-  }
-  auto get_vehicle_distances() {
-    return asarray(new vec<float>(S.person.veh_distance.begin(),
-                                  S.person.veh_distance.end()));
-  }
-  auto get_vehicle_total_distances() {
-    return asarray(new vec<float>(S.person.veh_total_distance.begin(),
-                                  S.person.veh_total_distance.end()));
-  }
-  uint get_lane_count() { return S.lane.lanes.size; }
-  // 按顺序获取车道id列表
-  auto get_lane_ids() {
-    auto* out = new vec<int>();
-    out->reserve(S.lane.lanes.size);
-    for (auto& l : S.lane.lanes) {
-      out->push_back(l.id);
-    }
-    return asarray(out);
-  }
-  // 获取车道上正在等待的车辆数
-  auto get_lane_waiting_vehicle_counts(float speed_threshold) {
-    auto* out = new vec<int>(S.lane.lanes.size);
-    for (int i = 0; i < S.person.veh_lane.size; ++i) {
-      auto lane = S.person.veh_lane[i];
-      if (lane >= 0 && S.person.veh_speed[i] < speed_threshold) {
-        out->at(lane) += 1;
-      }
-    }
-    return asarray(out);
-  }
-  // 获取道路末端正在等待的车辆数
-  auto get_lane_waiting_at_end_vehicle_counts(float speed_threshold,
-                                              float distance_to_end) {
-    auto* out = new vec<int>(S.lane.lanes.size);
-    for (int i = 0; i < S.person.veh_lane.size; ++i) {
-      auto lane = S.person.veh_lane[i];
-      if (lane >= 0 && S.person.veh_speed[i] < speed_threshold &&
-          S.person.veh_distance[i] >=
-              S.lane.lanes[i].length - distance_to_end) {
-        out->at(lane) += 1;
-      }
-    }
-    return asarray(out);
-  }
-  // 获取车道上的车辆数
-  auto get_lane_vehicle_counts() {
-    auto* out = new vec<int>(S.lane.lanes.size);
-    for (int i = 0; i < S.person.veh_lane.size; ++i) {
-      auto lane = S.person.veh_lane[i];
-      if (lane >= 0) {
-        out->at(lane) += 1;
-      }
-    }
-    return asarray(out);
-  }
-  // 获取车道状态，0、1、2、3代表绿、黄、红、限行
-  auto get_lane_statuses() {
-    auto* out = new vec<int8_t>();
-    out->reserve(S.lane.lanes.size);
-    for (auto& l : S.lane.lanes) {
-      out->push_back((l.restriction | l.in_restriction)                ? 3
-                     : l.light_state == LightState::LIGHT_STATE_GREEN  ? 0
-                     : l.light_state == LightState::LIGHT_STATE_YELLOW ? 1
-                                                                       : 2);
-    }
-    return asarray(out);
-  }
-  // 获取车道几何信息，[[x,y,...],...]
-  vec<vec<float>> get_lane_geoms() {
-    vec<vec<float>> out;
-    out.resize(S.lane.lanes.size);
-    int i = 0;
-    for (auto& l : S.lane.lanes) {
-      auto& o = out[i++];
-      o.reserve(l.line.size * 2);
-      for (auto& p : l.line) {
-        o.push_back(p.x);
-        o.push_back(p.y);
-      }
-    }
-    return out;
-  }
-  // 获取车道长度
-  auto get_lane_lengths() {
-    auto* out = new vec<float>();
-    out->reserve(S.lane.lanes.size);
-    for (auto& l : S.lane.lanes) {
-      out->push_back(l.length);
-    }
-    return asarray(out);
-  }
-  // 获取车道平均车速
-  auto get_lane_average_vehicle_speed(int lane_index) {
-    if (lane_index >= S.lane.lanes.size) {
-      throw std::out_of_range("Lane index out of range.");
-    }
-    return S.lane.lanes[lane_index].v_avg;
-  }
-  // 获取路口数目
-  uint get_junction_count() { return S.junction.junctions.size; }
+
   // 按顺序获取路口id列表
+  // Get the list of junction ids in order
   auto get_junction_ids() {
+    Info("Call get_junction_ids");
     auto* out = new vec<int>();
     out->reserve(S.junction.junctions.size);
     for (auto& j : S.junction.junctions) {
       out->push_back(j.id);
     }
+    Info("Call get_junction_ids: return out");
     return asarray(out);
   }
-  // 获取路口中的车道index
-  auto get_junction_lanes() {
-    vec<vec<int>> out;
-    out.reserve(S.junction.junctions.size);
-    for (auto& j : S.junction.junctions) {
-      vec<int> ids;
-      ids.reserve(j.lanes.size);
-      for (auto* l : j.lanes) {
-        if (l->type == LaneType::LANE_TYPE_DRIVING) {
-          ids.push_back(l->index);
-        }
-      }
-      out.push_back(std::move(ids));
-    }
-    return out;
-  }
-  // 获取路口的进入和离开车道index列表
-  auto get_junction_inout_lanes() {
-    vec<vec<int>> in, out;
-    in.reserve(S.junction.junctions.size);
-    out.reserve(S.junction.junctions.size);
-    for (auto& j : S.junction.junctions) {
-      vec<int> lane_in, lane_out;
-      lane_in.reserve(j.lanes.size);
-      lane_out.reserve(j.lanes.size);
-      for (auto* l : j.lanes) {
-        if (l->type == LaneType::LANE_TYPE_DRIVING) {
-          lane_in.push_back(l->predecessor->index);
-          lane_out.push_back(l->successor->index);
-        }
-      }
-      in.push_back(std::move(remove_duplicate(lane_in)));
-      out.push_back(std::move(remove_duplicate(lane_out)));
-    }
-    return std::make_pair(in, out);
-  }
+
   // 获取路口每个相位对应的进入和离开车道index列表
   auto get_junction_phase_lanes() {
     vec<vec<pair<vec<int>, vec<int>>>> out;
@@ -416,8 +276,6 @@ class Engine {
     }
     return out;
   }
-  // 获取路口数目
-  uint get_road_count() { return S.road.roads.size; }
   // 获取动态道路的车道方案
   auto get_road_lane_plans(uint road_index) {
     if (road_index >= S.road.roads.size) {
@@ -430,8 +288,8 @@ class Engine {
       auto a = r.nrl_ranges[i], b = r.nrl_ranges[i + 1];
       auto& o = out[i / 2];
       for (int j = a; j < b; ++j) {
-        o.emplace_back(r.next_road_lanes[j].l1->index,
-                       (r.next_road_lanes[j].l2 - 1)->index + 1);
+        o.emplace_back(r.next_road_lane_groups[j].offset1,
+                       r.next_road_lane_groups[j].offset2);
       }
     }
     return out;
@@ -449,54 +307,20 @@ class Engine {
     }
     throw std::out_of_range("Road lane plan out of range.");
   }
-  // 获取道路上正在等待的车辆数
-  auto get_road_waiting_vehicle_counts(float speed_threshold) {
-    auto* out = new vec<int>(S.road.roads.size);
-    for (int i = 0; i < S.person.veh_lane.size; ++i) {
-      auto lane = S.person.veh_lane[i];
-      if (lane >= 0 && S.person.veh_speed[i] < speed_threshold) {
-        auto& l = S.lane.lanes[lane];
-        if (l.parent_is_road) {
-          out->at(l.parent_road->index) += 1;
-        }
-      }
-    }
-    return asarray(out);
-  }
-  // 获取道路上的车辆数
-  auto get_road_vehicle_counts() {
-    auto* out = new vec<int>(S.road.roads.size);
-    for (int i = 0; i < S.person.veh_lane.size; ++i) {
-      auto lane = S.person.veh_lane[i];
-      if (lane >= 0) {
-        auto& l = S.lane.lanes[lane];
-        if (l.parent_is_road) {
-          out->at(l.parent_road->index) += 1;
-        }
-      }
-    }
-    return asarray(out);
-  }
-  // 获取道路平均车速
-  auto get_road_average_vehicle_speed(int road_index) {
-    if (road_index >= S.road.roads.size) {
-      throw std::out_of_range("Road index out of range.");
-    }
-    return S.road.roads[road_index].v_avg;
-  }
+
   // 获取用于输出的车辆信息 (id, parent_id, x, y, dir)
   auto get_output_vehicles() {
     vec<std::tuple<int, int, float, float>> out;
     auto xs = new vec<float>;
     auto ys = new vec<float>;
-    out.reserve(get_running_vehicle_count());
-    xs->reserve(get_running_vehicle_count());
-    ys->reserve(get_running_vehicle_count());
+    out.reserve(S.person.persons.size);
+    xs->reserve(S.person.persons.size);
+    ys->reserve(S.person.persons.size);
     for (auto& p : S.person.persons) {
       if (p.runtime.status == PersonStatus::DRIVING) {
         out.emplace_back(p.id,
                          p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
-                         p.runtime.dir, p.runtime.speed);
+                         p.runtime.dir, p.runtime.v);
         xs->push_back(p.runtime.x);
         ys->push_back(p.runtime.y);
       }
@@ -517,19 +341,6 @@ class Engine {
       ys->push_back(l->center_y);
     }
     return std::make_tuple(out, asarray(xs), asarray(ys));
-  }
-  // 设置人禁用
-  void set_vehicle_enable(uint vehicle_index, bool enable) {
-    if (vehicle_index >= S.person.persons.size) {
-      throw std::out_of_range("Vehicle index out of range.");
-    }
-    S.person.persons[vehicle_index].enable = enable;
-  }
-  void set_vehicle_enable_batch(const std::vector<uint>& vehicle_indices,
-                                const std::vector<bool>& enable) {
-    for (int i = 0, s = vehicle_indices.size(); i < s; ++i) {
-      set_vehicle_enable(vehicle_indices[i], enable[i]);
-    }
   }
   // 设置信控模式
   void set_tl_policy(uint junction_index, uint policy) {
@@ -623,118 +434,15 @@ class Engine {
       set_road_lane_plan(road_indices[i], plan_indices[i]);
     }
   }
-  void set_vehicle_route(int index, const vec<int>& route, int end_lane_id,
-                         float end_s) {
-    S.person.SetRoute(index, route, end_lane_id, end_s);
-  }
-  auto debug_vehicle_info() {
-    auto* out = new vec<double>();
-    out->reserve(S.person.M->veh_cnt * 5);
-    for (auto& p : S.person.persons) {
-      if (p.runtime.status == PersonStatus::DRIVING) {
-        out->push_back(p.id);
-        out->push_back(p.runtime.lane->id);
-        out->push_back(p.runtime.s);
-        out->push_back(p.runtime.acc);
-        out->push_back((int)p._reason);
-      }
-    }
-    return asarray(out);
-  }
-  auto debug_vehicle_full(uint id) {
-#define ID(x) ((x) ? int((x)->id) : -1)
-    auto& p = *S.person.At(id);
-    std::vector<uint> route;
-    p.route.veh->route.Save(route);
-    return std::make_tuple(
-        std::make_tuple(p.start_time),
-        std::make_tuple(p.runtime.speed, p.runtime.acc, int(p._reason),
-                        int(p._reason_detail),
-                        p.node.front ? int(p.node.front->self->id) : -1,
-                        ID(p.next_lane),
-                        p.next_lane ? p.next_lane->max_speed : -1,
-                        p.next_lane ? int(p.next_lane->light_state) : -1),
-        std::make_tuple((int)p.snapshot.status, ID(p.snapshot.lane),
-                        p.snapshot.s, p.snapshot.shadow_s, p.snapshot.speed,
-                        p.snapshot.is_lane_changing, ID(p.snapshot.shadow_lane),
-                        p.snapshot.lc_length, p.snapshot.lc_length,
-                        p.snapshot.lc_total_length,
-                        p.snapshot.lc_complete_length),
-        std::make_tuple(
-            (int)p.runtime.status, ID(p.runtime.lane), p.runtime.s,
-            p.runtime.shadow_s, p.runtime.speed, p.runtime.is_lane_changing,
-            ID(p.runtime.shadow_lane), p.runtime.lc_length, p.runtime.lc_length,
-            p.runtime.lc_total_length, p.runtime.lc_complete_length),
-        std::make_tuple(route, p.route_index, p.route_lc_offset));
-  }
-  auto debug_vehicle_front() {
-#define INDEX(x) ((x) ? int((x)->index) : -1)
-    auto* out = new vec<int>();
-    out->reserve(S.person.M->veh_cnt * 5);
-    for (auto& p : S.person.persons) {
-      if (p.snapshot.status == PersonStatus::DRIVING) {
-        out->push_back(p.node.index);
-        if (p.snapshot.is_lane_changing) {
-          // 变道时只看前方车辆
-          out->push_back(-1);
-          out->push_back(INDEX(p.node.front));
-          out->push_back(-1);
-          out->push_back(INDEX(p.shadow_node.front));
-        } else {
-          // 未变道时看前方和两侧车辆
-          out->push_back(INDEX(p.node.sides[LEFT][FRONT]));
-          out->push_back(INDEX(p.node.front));
-          out->push_back(INDEX(p.node.sides[RIGHT][FRONT]));
-          out->push_back(-1);
-        }
-      }
-    }
-    return asarray(out);
-  }
-  auto debug_vehicle_position() {
-#define INDEX(x) ((x) ? int((x)->index) : -1)
-    auto* out = new vec<double>();
-    out->reserve(S.person.M->veh_cnt * 5);
-    for (auto& p : S.person.persons) {
-      if (p.snapshot.status == PersonStatus::DRIVING) {
-        out->push_back(p.node.index);
-        out->push_back(ID(p.snapshot.lane));
-        out->push_back(p.snapshot.s);
-        out->push_back(p.snapshot.is_lane_changing
-                           ? (double)p.snapshot.shadow_lane->id
-                           : -1);
-        out->push_back(p.snapshot.shadow_s);
-      }
-    }
-    return asarray(out);
-  }
-  auto debug_lane_info() {
-    vec<vec<int>> out;
-    out.reserve(S.lane.lanes.size);
-    for (auto& l : S.lane.lanes) {
-      vec<int> vs;
-      auto* p = l.veh_head;
-      while (p) {
-        vs.push_back(p->self->id * (p->is_shadow ? -1 : 1));
-        p = p->next;
-      }
-      out.push_back(std::move(vs));
-    }
-    return out;
-  }
   void next_step(uint n) {
-    // 中间的步骤就没有必要更新输出，节省时间
-    S.enable_api_output = false;
+    // // 中间的步骤就没有必要更新输出，节省时间
     for (int i = 1; i < n; ++i) {
       S.Step();
     }
     if (n) {
-      S.enable_api_output = true;
       S.Step();
     }
   }
-  auto save() { return S.Save(); }
-  void load(size_t checkpoint_id) { S.Load(checkpoint_id); }
 };
 
 void set_device(int device_id) { CUCHECK(cudaSetDevice(device_id)); }
@@ -747,74 +455,24 @@ int get_device() {
 PYBIND11_MODULE(_moss, m) {
   py::class_<Engine>(m, "Engine")
       .def_readonly_static("__version__", &VER)
-      .def(py::init<const std::string&, const std::string&, uint, float, int,
-                    int, int, bool, bool, int, float, float, uint, float, uint,
-                    uint, float, bool, float, float, float, float, uint,
+      .def(py::init<const std::string&, const std::string&, const std::string&,
+                    uint, float, int, int, int, float, float, float,
+                    const std::string&, float, float, float, float, uint,
                     float>(),
-           "map_file"_a, "agent_file"_a, "start_step"_a, "step_interval"_a = 1,
-           "seed"_a = 43, "verbose_level"_a = 0, "agent_limit"_a = -1,
-           "disable_aoi_out_control"_a = false, "disable_junction"_a = false,
-           "junction_blocking_count"_a = -1, "junction_yellow_time"_a = 3,
-           "phase_pressure_coeff"_a = 1.5, "lane_change"_a = 1,
-           "mobil_lc_forbidden_distance"_a = 15,
-           "lane_veh_add_buffer_size"_a = 300,
-           "lane_veh_remove_buffer_size"_a = 300, "speed_stat_interval"_a = 0,
-           "enable_output"_a = false, "out_xmin"_a = 0, "out_ymin"_a = 0,
+           "name"_a, "map_file"_a, "person_file"_a, "start_step"_a,
+           "step_interval"_a = 1, "seed"_a = 43, "verbose_level"_a = 0,
+           "person_limit"_a = -1, "junction_yellow_time"_a = 3,
+           "phase_pressure_coeff"_a = 1.5, "speed_stat_interval"_a = 0,
+           "output_dir"_a = "", "out_xmin"_a = 0, "out_ymin"_a = 0,
            "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0,
            "device_mem"_a = 0, no_gil())
       .def("next_step", &Engine::next_step, "n"_a = 1, no_gil())
-      .def("get_map_projection", &Engine::get_map_projection, no_gil())
-      .def("get_map_bbox", &Engine::get_map_bbox, no_gil())
       .def("get_current_step", &Engine::get_current_step, no_gil())
       .def("get_current_time", &Engine::get_current_time, no_gil())
-      .def("get_vehicle_count", &Engine::get_vehicle_count, no_gil())
-      .def("get_vehicle_ids", &Engine::get_vehicle_ids, no_gil())
-      .def("get_vehicle_lanes", &Engine::get_vehicle_lanes, no_gil())
-      .def("get_vehicle_speeds", &Engine::get_vehicle_speeds, no_gil())
-      .def("get_vehicle_distances", &Engine::get_vehicle_distances, no_gil())
-      .def("get_vehicle_total_distances", &Engine::get_vehicle_total_distances,
-           no_gil())
-      .def("get_vehicle_positions", &Engine::get_vehicle_positions, no_gil())
-      .def("get_vehicle_positions_all", &Engine::get_vehicle_positions_all,
-           no_gil())
-      .def("get_vehicle_id_positions", &Engine::get_vehicle_id_positions,
-           no_gil())
-      .def("get_vehicle_statuses", &Engine::get_vehicle_statuses, no_gil())
-      .def("get_vehicle_raw_statuses", &Engine::get_vehicle_raw_statuses,
-           no_gil())
-      .def("get_vehicle_avds", &Engine::get_vehicle_avds, no_gil())
-      .def("get_running_vehicle_count", &Engine::get_running_vehicle_count,
-           no_gil())
-      .def("get_finished_vehicle_count", &Engine::get_finished_vehicle_count,
-           no_gil())
-      .def("get_vehicle_traveling_or_departure_times",
-           &Engine::get_vehicle_traveling_or_departure_times, no_gil())
-      .def("get_finished_vehicle_average_traveling_time",
-           &Engine::get_finished_vehicle_average_traveling_time, no_gil())
-      .def("get_running_vehicle_average_traveling_time",
-           &Engine::get_running_vehicle_average_traveling_time, no_gil())
-      .def("get_departed_vehicle_average_traveling_time",
-           &Engine::get_departed_vehicle_average_traveling_time, no_gil())
-      .def("get_lane_count", &Engine::get_lane_count, no_gil())
-      .def("get_lane_ids", &Engine::get_lane_ids, no_gil())
-      .def("get_lane_statuses", &Engine::get_lane_statuses, no_gil())
-      .def("get_lane_geoms", &Engine::get_lane_geoms, no_gil())
-      .def("get_lane_lengths", &Engine::get_lane_lengths, no_gil())
-      .def("get_lane_vehicle_counts", &Engine::get_lane_vehicle_counts,
-           no_gil())
-      .def("get_lane_waiting_vehicle_counts",
-           &Engine::get_lane_waiting_vehicle_counts, "speed_threshold"_a = 0.1,
-           no_gil())
-      .def("get_lane_waiting_at_end_vehicle_counts",
-           &Engine::get_lane_waiting_at_end_vehicle_counts,
-           "speed_threshold"_a = 0.1, "distance_to_end"_a = 100, no_gil())
-      .def("get_lane_average_vehicle_speed",
-           &Engine::get_lane_average_vehicle_speed, "lane_index"_a, no_gil())
+      .def("fetch_persons", &Engine::fetch_persons, no_gil())
+      .def("fetch_lanes", &Engine::fetch_lanes, no_gil())
+      .def("get_road_ids", &Engine::get_road_ids, no_gil())
       .def("get_junction_ids", &Engine::get_junction_ids, no_gil())
-      .def("get_junction_count", &Engine::get_junction_count, no_gil())
-      .def("get_junction_lanes", &Engine::get_junction_lanes, no_gil())
-      .def("get_junction_inout_lanes", &Engine::get_junction_inout_lanes,
-           no_gil())
       .def("get_junction_phase_lanes", &Engine::get_junction_phase_lanes,
            no_gil())
       .def("get_junction_phase_ids", &Engine::get_junction_phase_ids, no_gil())
@@ -822,23 +480,11 @@ PYBIND11_MODULE(_moss, m) {
            no_gil())
       .def("get_junction_dynamic_roads", &Engine::get_junction_dynamic_roads,
            no_gil())
-      .def("get_road_count", &Engine::get_road_count, no_gil())
       .def("get_road_lane_plans", &Engine::get_road_lane_plans, no_gil())
       .def("get_road_lane_plan_index", &Engine::get_road_lane_plan_index,
            no_gil())
-      .def("get_road_vehicle_counts", &Engine::get_road_vehicle_counts,
-           no_gil())
-      .def("get_road_waiting_vehicle_counts",
-           &Engine::get_road_waiting_vehicle_counts, "speed_threshold"_a = 0.1,
-           no_gil())
-      .def("get_road_average_vehicle_speed",
-           &Engine::get_road_average_vehicle_speed, "road_index"_a, no_gil())
       .def("get_output_vehicles", &Engine::get_output_vehicles, no_gil())
       .def("get_output_tls", &Engine::get_output_tls, no_gil())
-      .def("set_vehicle_enable", &Engine::set_vehicle_enable, "vehicle_index"_a,
-           "enable"_a, no_gil())
-      .def("set_vehicle_enable_batch", &Engine::set_vehicle_enable_batch,
-           "person_indices"_a, "enable"_a, no_gil())
       .def("set_lane_restriction", &Engine::set_lane_restriction,
            "lane_index"_a, "flag"_a, no_gil())
       .def("set_lane_restriction_batch", &Engine::set_lane_restriction_batch,
@@ -862,16 +508,7 @@ PYBIND11_MODULE(_moss, m) {
       .def("set_road_lane_plan", &Engine::set_road_lane_plan, "road_index"_a,
            "plan_index"_a, no_gil())
       .def("set_road_lane_plan_batch", &Engine::set_road_lane_plan_batch,
-           "road_indices"_a, "plan_indices"_a, no_gil())
-      .def("set_vehicle_route", &Engine::set_vehicle_route, "vehicle_index"_a,
-           "route"_a, "end_lane_id"_a, "end_s"_a, no_gil())
-      .def("debug_vehicle_info", &Engine::debug_vehicle_info, no_gil())
-      .def("debug_vehicle_full", &Engine::debug_vehicle_full, "id"_a, no_gil())
-      .def("debug_vehicle_front", &Engine::debug_vehicle_front, no_gil())
-      .def("debug_vehicle_position", &Engine::debug_vehicle_position, no_gil())
-      .def("debug_lane_info", &Engine::debug_lane_info, no_gil())
-      .def("make_checkpoint", &Engine::save, no_gil())
-      .def("restore_checkpoint", &Engine::load, "checkpoint_id"_a, no_gil());
+           "road_indices"_a, "plan_indices"_a, no_gil());
   m.attr("__version__") = VER;
   m.def("set_device", set_device, "device_id"_a, no_gil());
   m.def("get_device", get_device, no_gil());

@@ -2,49 +2,50 @@
 #define SRC_ENTITY_JUNCTION_JUNCTION_CUH_
 
 #include <vector>
-#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "entity/junction/trafficlight/trafficlight.cuh"
 #include "entity/lane/lane.cuh"
+#include "fmt/core.h"
 #include "protos.h"
 
 namespace moss {
 struct Moss;
 
 enum TlPolicy {
-  MANUAL,        // 手动控制，不自动切换
-  FIXED_TIME,    // 固定时间轮替
-  MAX_PRESSURE,  // 最大压力
-  NONE,          // 无信控
+  // manual control, no auto switch
+  MANUAL,
+  // fixed time wheel rotation
+  FIXED_TIME,
+  // max pressure algorithm
+  MAX_PRESSURE,
+  // disabling traffic lights and vehicles can pass freely
+  NONE,
 };
 
 struct Junction {
   uint id, index;
-  MArrZ<Lane*> lanes;               // 车道指针数组
-  trafficlight::MPTrafficLight tl;  // 信号灯模块
-  TlPolicy tl_policy;               // 信控方案
-  int phase_time;                   // 相位切换时长
-};
-
-struct JunctionCheckpoint {
+  // lanes in junction
+  MArrZ<Lane*> lanes;
+  // traffic light
+  trafficlight::MPTrafficLight tl;
+  // traffic light policy
   TlPolicy tl_policy;
-  bool ok;
-  uint phase_index;
-  std::vector<LightState> yellow_phases;
-  bool is_yellow;
-  uint next_index;
-  std::vector<float> phase_duration, phase_pressure_coeff;
-  trafficlight::MPTLRuntime snapshot, runtime;
-  bool set_force;
+  // phase switching duration
+  int phase_time;
 };
 
 namespace junction {
 struct Data {
+  // data array: index -> junction
   MArrZ<Junction> junctions;
+  // data map: id -> junction
   std::unordered_map<uint, Junction*> junction_map;
-  cudaStream_t stream;
   Moss* S;
+  // kernel stream
+  cudaStream_t stream;
+  // kernel launch grid size (g_)
   int g_prepare, g_update;
+  // kernel launch block size (b_)
   int b_prepare, b_update;
 
   void Init(Moss* S, const PbMap&);
@@ -57,8 +58,6 @@ struct Data {
   }
   void PrepareAsync();
   void UpdateAsync();
-  void Save(std::vector<JunctionCheckpoint>&);
-  void Load(const std::vector<JunctionCheckpoint>&);
 };
 }  // namespace junction
 

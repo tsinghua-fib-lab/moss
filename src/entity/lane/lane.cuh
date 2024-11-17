@@ -3,9 +3,11 @@
 
 #include <utility>
 #include <vector>
-#include "fmt/core.h"
 #include "containers/array.cuh"
 #include "containers/vector.cuh"
+#include "containers/list.cuh"
+#include "fmt/core.h"
+#include "output/output.cuh"
 #include "protos.h"
 #include "utils/geometry.cuh"
 
@@ -23,97 +25,97 @@ struct LaneConnection {
   Lane* lane;
 };
 
-// 在lane沿途设置多个观测点，lane在更新时会更新观测点位置前后的车辆信息
-// 【前】指s>=observer，【后】指s<observer
-struct LaneObservation {
-  PersonNode *front, *back;
-};
-
-struct Overlap {
-  // 是否本车道优先
-  bool self_first;
-  // 冲突车道位置
-  float other_s;
-  // 冲突车道指针
-  Lane* other;
-};
-
-struct LaneCheckpoint {
-  bool restriction;
-  PersonNode *ped_head, *veh_head;
-  LightState light_state;
-  float light_time;
-  uint ped_cnt, veh_cnt;
-  float pressure_in, pressure_out;
-  float v_avg;
-  std::vector<LaneObservation> observations;
-  std::vector<PersonNode*> ped_add_buffer, veh_add_buffer, ped_remove_buffer,
-      veh_remove_buffer;
-};
-
 struct Lane {
+  // lane id
   uint id;
-  uint index;  // 在数组中的下标
+  // lane offset in container
+  uint index;
+  // lane type: 1 - driving, 2 - walking
   uint type;
+  // lane turn: 1 - go straight, 2 - turn left, 3 - turn right, 4 - U-turn
   uint turn;
+  // road / junction id
   uint parent_id;
-  uint next_road_id;  // 后面连接的道路ID；仅对交叉口内部车道有效
-  bool parent_is_road;
-  bool need_side_update;  // 是否需要做支链更新
-  float length;
-  float center_x, center_y;  // 估计的中心，用于输出
-  float max_speed;
-  float width;
-  bool restriction, in_restriction;  // 限行状态
-  MArrZ<Point> line;
-  // 长度的累计和，从0开始，n+1项
-  MArrZ<float> line_lengths;
-  // 每一段的方向，n项
-  MArrZ<float> line_directions;
-  // 前驱后继
-  MArrZ<LaneConnection> predecessors, successors;
-  // 首个前驱后继
-  Lane *predecessor, *successor;
-  Lane* side_lanes[2];
-  // 观测点位置(需要确保有序)和结果
-  MArrZ<float> observers;
-  MArrZ<LaneObservation> observations;
-  // 人车链表头
-  PersonNode *ped_head, *veh_head;
-  DVector<PersonNode*> ped_add_buffer, veh_add_buffer;
-  DVector<PersonNode*> ped_remove_buffer, veh_remove_buffer;
-  LightState light_state;
-  float light_time;
-  float pressure_in, pressure_out;
-  float v_avg;  // 平均车速
-  uint ped_cnt, veh_cnt;
-  // overlap
-  MArrZ<Overlap> overlaps;
+  // parent road / junction pointer
   union {
     Junction* parent_junction;
     Road* parent_road;
   };
+  // offset on road's lanes, the leftest lane is 0
+  uint offset_on_road : 31;
+  // helper to determine if the parent is road or junction
+  bool parent_is_road : 1;
+  // lane length
+  float length;
+  // lane width
+  float width;
+  // lane center coordinates
+  float center_x, center_y;
+  // lane max speed (m/s)
+  float max_speed;
+  // restriction status TODO: more details
+  bool restriction, in_restriction;
+  // geometry of the lane
+  // point list
+  MArrZ<Point> line;
+  // accumulated length of each line segment
+  MArrZ<float> line_lengths;
+  // direction of each line segment
+  MArrZ<float> line_directions;
+  // lane connections
+  MArrZ<LaneConnection> predecessors, successors;
+  // the first predecessor and successor (only for junction lane)
+  Lane *predecessor, *successor;
+  // the left and right side lanes
+  Lane* side_lanes[2];
+  // linked list header for vehicle sensing and pedestrian management
+  PersonNode *ped_head, *veh_head;
+  // vehicle and pedestrian count
+  uint ped_cnt, veh_cnt;
+  // add buffer for vehicle and pedestrian TODO: lock-free linked list
+  DList<PersonNode> ped_add_buffer, veh_add_buffer;
+  // remove buffer for vehicle and pedestrian TODO: lock-free linked list
+  DList<PersonNode> ped_remove_buffer, veh_remove_buffer;
+  // traffic light status (only junction lane)
+  LightState light_state;
+  // the remaining time of the current light state (only junction lane)
+  float light_time;
+  // pressure in and out (only junction lane)
+  float pressure_in, pressure_out;
+  // average vehicle speed (m/s)
+  float v_avg;
 
   __device__ bool IsNoEntry();
-  __device__ __host__ void GetPosition(float s, float& x, float& y);
+  __host__ __device__ void GetPosition(float s, float& x, float& y);
   __device__ void GetPositionDir(float s, float& x, float& y, float& dir);
   std::tuple<double, double, double> GetPositionDir(float s);
 };
+
+// 同一道路上两个车道间按照等比例方式进行投影
+// project from src_lane to dest_lane in the same road, using an equal ratio
+// way.
+__host__ __device__ float ProjectFromLane(Lane* src_lane, Lane* dest_lane,
+                                          float s);
 
 namespace lane {
 using Type = PbLaneType;
 struct Data {
   MArrZ<Lane> lanes;
   MArrZ<Lane*> output_lanes;
+  MArrZ<TlOutput> outputs;
   std::unordered_map<uint, Lane*> lane_map;
   cudaStream_t stream;
   Moss* S;
-  int g_prepare0, g_prepare1, g_prepare2, g_update_tl, g_update_rs, g_update_ro,
+  // kernel grid size (g_)
+  int g_prepare0, g_prepare1, g_prepare2, g_prepare_output, g_update_rs,
       g_update_ls;
-  int b_prepare0, b_prepare1, b_prepare2, b_update_tl, b_update_rs, b_update_ro,
+  // kernel block size (b_)
+  int b_prepare0, b_prepare1, b_prepare2, b_prepare_output, b_update_rs,
       b_update_ls;
 
+  // init lane data
   void Init(Moss* S, const PbMap&);
+  // init remaining data after junction and road initialization
   void InitSizes(Moss* S);
   inline Lane* At(uint id) {
     auto iter = lane_map.find(id);
@@ -122,10 +124,11 @@ struct Data {
     }
     return iter->second;
   }
+  // prepare person related data including linked list, add/remove buffer
   void PrepareAsync(cudaStream_t stream);
+  // prepare output data
+  void PrepareOutputAsync(cudaStream_t stream);
   void UpdateAsync();
-  void Save(std::vector<LaneCheckpoint>&);
-  void Load(const std::vector<LaneCheckpoint>&);
 };
 }  // namespace lane
 

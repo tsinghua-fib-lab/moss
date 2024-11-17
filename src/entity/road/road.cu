@@ -25,24 +25,30 @@ void Data::Init(Moss* S, const PbMap& map) {
       double s = 0;
       uint index = 0;
       for (auto& i : pb.lane_ids()) {
-        auto* l = r.lanes[index++] = S->lane.At(i);
+        auto* l = r.lanes[index] = S->lane.At(i);
         l->parent_is_road = true;
-        // 除了0号车道外都需要更新支链
-        l->need_side_update = index != 1;
+        l->offset_on_road = index;
         s += l->max_speed;
         l->parent_road = &r;
         if (l->type == LaneType::LANE_TYPE_DRIVING) {
           r.right_driving_lane = l;
+        } else if (l->type == LaneType::LANE_TYPE_WALKING) {
+          r.walking_lane = l;
         }
+        ++index;
       }
       r.max_speed = r.v_avg = s / r.lanes.size;
     }
-    // 填充side_lanes
+    // init side_lanes
     Lane* last = nullptr;
-    for (auto& l : r.lanes) {
-      l->side_lanes[0] = last;
+    for (auto* l : r.lanes) {
+      if (l->type != LaneType::LANE_TYPE_DRIVING) {
+        // scan into the walking lane, stop
+        break;
+      }
+      l->side_lanes[LEFT] = last;
       if (last) {
-        last->side_lanes[1] = l;
+        last->side_lanes[RIGHT] = l;
       }
       last = l;
     }
@@ -59,14 +65,15 @@ void Data::Init(Moss* S, const PbMap& map) {
         r.nrl_ranges[j + 1] = (c += pb.next_road_lanes_size());
         j += 2;
       }
-      r.next_road_lanes.New(S->mem, c);
+      r.next_road_lane_groups.New(S->mem, c);
       j = 0;
       for (auto& pb : pb.next_road_lane_plans()) {
         for (auto& pb : pb.next_road_lanes()) {
-          r.next_road_lanes[j++] = {
-              .id = unsigned(pb.road_id()),
-              .l1 = S->lane.At(pb.lane_id_a()),
-              .l2 = S->lane.At(pb.lane_id_b()) + 1};
+          r.next_road_lane_groups[j++] = {
+              .next_road_id = unsigned(pb.road_id()),
+              .offset1 = S->lane.At(pb.lane_id_a())->offset_on_road,
+              .offset2 = S->lane.At(pb.lane_id_b())->offset_on_road,
+          };
         }
       }
       r.nrl_a = 0;
@@ -80,54 +87,31 @@ void Data::Init(Moss* S, const PbMap& map) {
           }
         }
       }
-      r.next_road_lanes.New(S->mem, nrl.size());
+      r.next_road_lane_groups.New(S->mem, nrl.size());
       r.nrl_a = 0;
-      r.nrl_b = r.next_road_lanes.size;
+      r.nrl_b = r.next_road_lane_groups.size;
       int i = 0;
       for (auto&& [rid, ls] : nrl) {
-        auto& x = r.next_road_lanes[i++];
+        auto& x = r.next_road_lane_groups[i++];
         assert(ls.size());
-        Lane *a, *b;
-        a = b = *ls.begin();
+        // offset range: [a, b]
+        uint a, b;
+        a = b = (*ls.begin())->offset_on_road;
         for (auto& i : ls) {
-          a = min(a, i);
-          b = max(b, i);
+          auto offset = i->offset_on_road;
+          a = min(a, offset);
+          b = max(b, offset);
         }
         if ((b - a) != ls.size() - 1) {
           throw std::range_error(
               "Only continuous next road plans are supported.");
         }
-        x.id = rid;
-        x.l1 = a;
-        x.l2 = b + 1;
+        x.next_road_id = rid;
+        x.offset1 = a;
+        x.offset2 = b;
       }
     }
   }
 }
 
-void Data::Save(std::vector<RoadCheckpoint>& state) {
-  state.resize(roads.size);
-  for (int i = 0; i < roads.size; ++i) {
-    auto& s = state[i];
-    auto& r = roads[i];
-    s.max_speed = r.max_speed;
-    s.v_avg = r.v_avg;
-    s.status = r.status;
-    s.nrl_a = r.nrl_a;
-    s.nrl_b = r.nrl_b;
-  }
-}
-
-void Data::Load(const std::vector<RoadCheckpoint>& state) {
-  assert(roads.size == state.size());
-  for (int i = 0; i < roads.size; ++i) {
-    auto& s = state[i];
-    auto& r = roads[i];
-    r.max_speed = s.max_speed;
-    r.v_avg = s.v_avg;
-    r.status = s.status;
-    r.nrl_a = s.nrl_a;
-    r.nrl_b = s.nrl_b;
-  }
-}
 };  // namespace moss::road

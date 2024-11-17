@@ -1,100 +1,99 @@
 #include <cassert>
+#include "entity/aoi/aoi.cuh"
 #include "entity/person/person.cuh"
 
 namespace moss::person {
-// const float BIKE_SPEED = 4;
-const float DEFAULT_DESIRED_SPEED_ON_LANE = 1.34;
-// const float MAX_NOISE_ON_PEDESTRIAN_SPEED = .5;
 
-__device__ void UpdatePedestrian(Person& p, float global_time,
-                                 float step_interval) {
+__device__ bool UpdatePedestrian(Person& p, float t, float dt) {
+  bool is_end;
   float s = p.snapshot.s;
-  auto& r = p.route.ped->route;
-  auto seg = r[p.route_index];
+  auto& segments = p.route->ped->route;
+  auto seg = segments[p.route_index];
   assert(s >= 0 && s <= seg.lane->length);
-  bool next_lane = false;
-  bool red_light = false;
   // TODO: 骑车
-  float ds = DEFAULT_DESIRED_SPEED_ON_LANE * step_interval;
+  float v = p.ped_attr.v;
+  if (p.snapshot.lane->IsNoEntry()) {
+    v *= 2;  // red light, go faster
+  }
+  float ds = v * dt;
   // printf("Ped %d Lane %d forward %d s %.3f+%.3f/%.3f\n", p.id, seg.lane->id,
   //        p.runtime.is_forward, s, ds, seg.lane->length);
-  float length;
-  // dir_forward:1 dir_backward:2 -> is_forward:1 is_backward:0
-  // 这个赋值是在初始化new的时候做的
-  // p.runtime.is_forward = (seg.dir ==
-  // MovingDirection::MOVING_DIRECTION_FORWARD);
-  if (p.snapshot.is_forward) {
-    s = s + ds;
-    length = seg.lane->length;
-    if (s > length) {
-      if (p.route_index + 1 < r.size &&
-          r[p.route_index + 1].lane->IsNoEntry()) {
-        red_light = true;
-        s = length;
-      } else {
-        next_lane = true;
-        while (true) {
-          s -= length;
-          ++p.route_index;
-          if (p.route_index >= r.size) {
-            p.is_end = true;
-            break;
-          }
-          length = r[p.route_index].lane->length;
-          if (s <= length) {
-            break;
-          }
-        }
-      }
-    }
+
+  // add increment to s
+  if (seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD) {
+    s += ds;
   } else {
-    s = s - ds;
-    if (s <= 0) {
-      if (p.route_index + 1 < r.size &&
-          r[p.route_index + 1].lane->IsNoEntry()) {
-        red_light = true;
-        s = 0;
-      } else {
-        next_lane = true;
-        length = 0;
-        while (s + length <= 0) {
-          s += length;
-          ++p.route_index;
-          if (p.route_index >= r.size) {
-            p.is_end = true;
-            break;
-          }
-          length = r[p.route_index].lane->length;
-        };
+    s -= ds;
+  }
+  // for loop to update s, person position, route_index until s is in the range
+  while (true) {
+    bool shouldNext = s < 0 || s > seg.lane->length;
+    if (!shouldNext) {
+      break;
+    }
+    // check if the next segment is a no entry lane
+    if (p.route_index + 1 < segments.size) {
+      if (segments[p.route_index + 1].lane->IsNoEntry()) {
+        // do nothing, just return
+        p.runtime.v = 0;
+        return;
+      }
+      // go to the next segment
+      if (s < 0) {
         s = -s;
+      } else if (s > seg.lane->length) {
+        s -= seg.lane->length;
       }
-    }
-  }
-  if (!p.is_end && p.route_index >= r.size - 1 &&
-      (seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD
-           ? s >= p.route.ped->end_s
-           : s <= p.route.ped->end_s)) {
-    p.is_end = true;
-  }
-  if (p.is_end) {
-    return;
-  }
-  if (red_light) {
-    p.runtime.speed = 0;
-  } else {
-    p.runtime.speed = DEFAULT_DESIRED_SPEED_ON_LANE;
-    if (next_lane) {
-      seg = r[p.route_index];
-      p.runtime.is_forward =
-          seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD;
-      if (!p.runtime.is_forward) {
+      ++p.route_index;
+      seg = segments[p.route_index];
+      if (seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD) {
+        // do nothing
+      } else {
+        // reverse the s
         s = seg.lane->length - s;
       }
-      p.runtime.lane = seg.lane;
-      p.snapshot.lane->ped_remove_buffer.Append(&p.node);
-      p.runtime.lane->ped_add_buffer.Append(&p.node);
+    } else {
+      // there is no next segment, the person is at the end of the route
+      is_end = true;
+      break;
     }
   }
+  // check if the person is at the end of the route
+  auto is_forward = seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD;
+  if (!is_end && p.route_index >= segments.size - 1 &&
+      (is_forward ? s >= p.trip->end_s : s <= p.trip->end_s)) {
+    is_end = true;
+  }
+  // clamp s to the range
+  s = Clamp<float>(s, 0, seg.lane->length);
+  if (is_end) {
+    p.runtime = {
+        .lane = p.trip->end_lane,
+        .s = p.trip->end_s,
+        .aoi = p.trip->end_aoi,
+        .v = 0,
+    };
+    if (p.runtime.lane) {
+      p.runtime.lane->GetPosition(p.runtime.s, p.runtime.x, p.runtime.y);
+    } else {
+      assert(p.runtime.aoi);
+      p.runtime.x = p.runtime.aoi->x;
+      p.runtime.y = p.runtime.aoi->y;
+    }
+    // delete the person from the current lane
+    p.snapshot.lane->ped_remove_buffer.Add(&p.node.remove_node);
+    return true;
+  }
+  // update runtime and others
   p.runtime.s = s;
+  p.runtime.v = v;
+  p.runtime.is_forward = is_forward;
+  p.runtime.lane = seg.lane;
+  // update lane's linked list
+  if (p.runtime.lane != p.snapshot.lane) {
+    p.snapshot.lane->ped_remove_buffer.Add(&p.node.remove_node);
+    p.runtime.lane->ped_add_buffer.Add(&p.node.add_node);
+  }
+  return false;
 }
 }  // namespace moss::person

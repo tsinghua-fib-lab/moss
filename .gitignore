@@ -60,6 +60,7 @@ CTestTestfile.cmake
 _deps
 .cmake/
 build/*
+build_release/*
 
 # Mac OS
 .DS_Store

@@ -12,9 +12,7 @@
 #include <thread>
 #include "mem/mem.cuh"
 #include "moss.cuh"
-#include "output.cuh"
 #include "protos.h"
-#include "rpc/routing.cuh"
 #include "utils/color_print.h"
 #include "utils/debug.cuh"
 #include "utils/profile.h"
@@ -24,67 +22,24 @@ namespace moss {
 
 std::atomic_int moss_id;
 
-size_t Moss::Save() {
-  auto* p = new Checkpoint;
-  checkpoints[(size_t)p] = p;
-  p->step = step;
-  p->time = time;
-  p->veh_cnt = person.M->veh_cnt;
-  p->ped_cnt = person.M->ped_cnt;
-  p->crowd_cnt = person.M->crowd_cnt;
-  p->finished_cnt = person.M->finished_cnt;
-  p->traveling_time = person.M->traveling_time;
-  p->finished_traveling_time = person.M->finished_traveling_time;
-  lane.Save(p->lanes);
-  road.Save(p->roads);
-  junction.Save(p->junctions);
-  aoi.Save(p->aois);
-  person.Save(p->persons);
-  person.veh_lane.Save(p->veh_lane);
-  person.veh_speed.Save(p->veh_speed);
-  person.veh_distance.Save(p->veh_distance);
-  person.veh_total_distance.Save(p->veh_total_distance);
-  return (size_t)p;
-}
-
-void Moss::Load(size_t id) {
-  auto iter = checkpoints.find(id);
-  if (iter == checkpoints.end()) {
-    throw std::range_error("Specified checkpoint does not exist.");
-  }
-  auto* p = iter->second;
-  step = p->step;
-  time = p->time;
-  person.M->veh_cnt = p->veh_cnt;
-  person.M->ped_cnt = p->ped_cnt;
-  person.M->crowd_cnt = p->crowd_cnt;
-  person.M->finished_cnt = p->finished_cnt;
-  person.M->traveling_time = p->traveling_time;
-  person.M->finished_traveling_time = p->finished_traveling_time;
-  lane.Load(p->lanes);
-  road.Load(p->roads);
-  junction.Load(p->junctions);
-  aoi.Load(p->aois);
-  person.Load(p->persons);
-  person.veh_lane.Load(p->veh_lane);
-  person.veh_speed.Load(p->veh_speed);
-  person.veh_distance.Load(p->veh_distance);
-  person.veh_total_distance.Load(p->veh_total_distance);
-}
-
-void Moss::Init(const Config& config_) {
+void Moss::Init(const std::string& name, const Config& config_) {
   id = moss_id++;
   config = config_;
-  color_print::enable = verbose = config.verbose_level;
-  // 关闭输出缓冲
+  if (!config.output.enable) {
+    config.output.dir = "";
+  }
+  step_output.Init(config.output.dir, name, config.map_file,
+                   config.output.tl_file_duration);
+  color_print::enable = verbose = config.verbose_level > 0;
+  // disable output buffer for better performance
   setbuf(stdout, NULL);
-  // 初始化设备
+  // init cuda device
   CUCHECK(cudaSetDevice(config.device));
-  CUCHECK(cudaFree(0));
+  CUCHECK(cudaFree(0));  // just check it
   CUCHECK(cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount,
                                  config.device));
   Info("Using GPU ", config.device, " with ", sm_count, " SMs");
-  // 初始化内存池
+  // init memory pool
   {
     Tag _("Mem Init", 0);
     size_t size;
@@ -99,48 +54,24 @@ void Moss::Init(const Config& config_) {
     Info("Using ", size / 1024 / 1024 / 1024, "GB memory");
     mem = MemManager::New(size, config.device, verbose);
   }
+  // init multi-thread
   if (config.n_workers == 0) {
     config.n_workers = get_nprocs();
   }
   Info("Using ", config.n_workers, " CPUs");
 
-  // 初始化全局变量
+  // init global variables
   step = config.start_step;
   time = step * config.step_interval;
   seed = config.seed = config.seed == 0 ? Time() : config.seed;
   Info("Using seed=", config.seed);
-  if (config.disable_aoi_out_control) {
-    Warn("Disable AOI out control");
-    aoi.out_control = false;
-  }
-  Info("Junction: ", config.enable_junction ? "True" : "False");
   Info("Junction yellow time: ", config.junction_yellow_time);
-  Info("Junction blocking count: ", config.junction_blocking_count);
-  if (config.output_type == "disable") {
-    output.option = output::Option::DISABLE;
-    Info("Output: False");
-  } else {
-    Info("Output: ", config.output_file);
-    if (config.output_type == "agent") {
-      output.option = output::Option::AGENT;
-      Info("OutputType: Agent");
-    } else if (config.output_type == "lane") {
-      output.option = output::Option::LANE;
-      Info("OutputType: Lane");
-    } else if (config.output_type == "python") {
-      output.option = output::Option::PYTHON;
-      Info("OutputType: Python");
-    } else {
-      Fatal("Unknown output_type: ", config.output_type);
-    }
-  }
-  road.k_status = config.speed_stat_interval <= 0
-                      ? 0
-                      : exp(-config.step_interval / config.speed_stat_interval);
+  // init road k parameter for speed statistics
+  road.k_status = exp(-config.step_interval / config.speed_stat_interval);
 
-  // 读入数据文件
+  // read map and persons
   PbMap map;
-  PbAgents agents;
+  PbPersons persons;
   {
     Tag _("Reading files", 1);
     Info("Reading map...");
@@ -153,16 +84,15 @@ void Moss::Init(const Config& config_) {
       Fatal("Failed to parse map file.");
     }
     file.close();
-    Info("Reading agents...");
-    file.open(config.agent_file, std::ios::in | std::ios::binary);
+    Info("Reading persons...");
+    file.open(config.person_file, std::ios::in | std::ios::binary);
     if (!file) {
-      Fatal("Cannot open file: ", config.agent_file);
+      Fatal("Cannot open file: ", config.person_file);
     }
-    if (!agents.ParseFromIstream(&file)) {
+    if (!persons.ParseFromIstream(&file)) {
       Fatal("Failed to parse agent file.");
     }
     file.close();
-    map_projection = map.header().projection();
     map_west = map.header().west();
     map_east = map.header().east();
     map_south = map.header().south();
@@ -171,13 +101,13 @@ void Moss::Init(const Config& config_) {
     Info("Road: ", map.roads_size());
     Info("Junction: ", map.junctions_size());
     Info("AOI: ", map.aois_size());
-    Info("Person: ", agents.persons_size());
+    Info("Person: ", persons.persons_size());
   }
 
-  // 更新上限
-  config.agent_limit = min(config.agent_limit, agents.persons_size());
+  // update person limit as person size used in the simulation
+  config.person_limit = min(config.person_limit, persons.persons_size());
 
-  // 初始化各类模拟对象
+  // init simulation entities
   {
     mem->PreferCPU();
     Tag _("Entity Init", 2);
@@ -196,17 +126,10 @@ void Moss::Init(const Config& config_) {
     mem->PrintUsage();
     Info("+ AOI");
     aoi.Init(this, map);
-    Info("P<", aoi.g_prepare, ",", aoi.b_prepare, ">");
-    Info("U<", aoi.g_update, ",", aoi.b_update, ">");
     mem->PrintUsage();
-    if (!is_python_api) {
-      Info("+ Post");
-      routing.Init(this, config.routing_url, config.n_workers);
-      mem->PrintUsage();
-    }
     lane.InitSizes(this);
     Info("+ Person");
-    person.Init(this, agents, config.agent_limit);
+    person.Init(this, persons, config.person_limit);
     Info("P<", person.g_prepare, ",", person.b_prepare, ">");
     Info("U<", person.g_update, ",", person.b_update, ">");
     mem->PrintUsage();
@@ -215,69 +138,39 @@ void Moss::Init(const Config& config_) {
   Info("done.");
   CHECK;
   color_print::enable = verbose = config.verbose_level > 1;
-  // 输出
-  if (output.option != output::Option::DISABLE) {
-    output.Init(this, config.output_file);
-  }
 }
 
 void Moss::Step() {
   uint64_t t = Time();
-  Tag _(fmt::format("Step: {} Veh: {} Ped: {}", step - config.start_step,
-                    person.M->veh_cnt, person.M->ped_cnt)
-            .c_str(),
-        7);
-#if STUCK_MONITOR
-  Info("Step: ", global::step - global::START_STEP, " (", global::step, ") ",
-       fmt::format("{:.2f}", 1e6 / max(1, t - last_t)),
-       "Hz Veh:", person.veh_cnt, " Stuck:", person.stuck_cnt,
-       " Ped:", person.ped_cnt, " Crowd:", person.crowd_cnt);
-#else
+  Tag _(fmt::format("Step: {}", step - config.start_step).c_str(), 7);
   Info("[", id, "] Step: ", step - config.start_step, " (", step, ") ",
        fmt::format("{:.2f}", 1e6 / max(1, t - last_step_t)),
-       "Hz Veh:", person.M->veh_cnt, " Ped:", person.M->ped_cnt,
-       " Crowd:", person.M->crowd_cnt);
-#endif
+       "Hz Sleep:", person.M->status_cnts[0],
+       " Walk:", person.M->status_cnts[1], " Drive:", person.M->status_cnts[2],
+       " Finished:", person.M->status_cnts[3]);
   last_step_t = t;
-  // 准备
+  // Prepare stage
   {
     Tag _("Prepare", 3);
     person.PrepareAsync();
-    aoi.PrepareAsync();
     junction.PrepareAsync();
-    // 需要等待位置更新后才能更新链表
+    // Need to wait for the position update (person) before updating the lane
+    // list
     lane.PrepareAsync(person.stream);
+    lane.PrepareOutputAsync(junction.stream);
     CUCHECK(cudaDeviceSynchronize());
     CHECK_ERROR;
   }
-  if (!is_python_api) {
-    Tag _("Routing Prepare", 4);
-    routing.Prepare();
-  }
-  {
-    Tag _("Wait output", 8);
-    output.Wait();
-  }
-  // 更新
+  // Update stage
   {
     Tag _("Update", 5);
     lane.UpdateAsync();
     person.UpdateAsync();
-    aoi.UpdateAsync();
     junction.UpdateAsync();
+    // write output into file
+    step_output.Write(time, person.outputs, lane.outputs);
     CUCHECK(cudaDeviceSynchronize());
     CHECK_ERROR;
-  }
-  // 输出
-  {
-    Tag _("Output start", 9);
-    output.Start();
-  }
-  // 处理导航请求
-  if (!is_python_api) {
-    Tag _(fmt::format("Routing Requests: {}", routing.d_post->size).c_str(), 6);
-    routing.ProcessRequests();
-    CHECK;
   }
   ++step;
   time = step * config.step_interval;
@@ -288,15 +181,14 @@ void Moss::Run() {
   for (uint i = 0; i < config.total_step; ++i) {
     Step();
   }
+  step_output.Close();
   Info("Simulation complete");
-  output.Stop();
-  routing.StopWorkers();
 }
 
 void Moss::Stop() {
-  output.Stop();
   ++step;
   time = step * config.step_interval;
+  step_output.Close();
 }
 
 };  // namespace moss

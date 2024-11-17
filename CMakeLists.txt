@@ -8,7 +8,7 @@ project(cuda LANGUAGES CXX CUDA)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # set runtime output dir
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/build/bin/")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/")
 
 set(CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS_INIT} -fPIC")
 set(CMAKE_CUDA_STANDARD 17)
@@ -17,8 +17,9 @@ set(CMAKE_CXX_STANDARD 17)
 # include cmake
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/" ${CMAKE_MODULE_PATH})
 include(BuildType)
+
 # if Release build, disable all warning
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
   add_compile_options(-w)
 endif(CMAKE_BUILD_TYPE STREQUAL "Release")
 
@@ -46,8 +47,9 @@ FetchContent_Declare(
 FetchContent_Declare(
   cityproto
   GIT_REPOSITORY https://github.com/tsinghua-fib-lab/cityproto
-  GIT_TAG v1.25.1
+  GIT_TAG v2.0.0-alpha.8
 )
+
 set(FETCHCONTENT_QUIET OFF)
 set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "")
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "")
@@ -64,6 +66,15 @@ set(gRPC_BUILD_GRPC_PHP_PLUGIN OFF CACHE BOOL "")
 set(gRPC_BUILD_GRPC_PYTHON_PLUGIN OFF CACHE BOOL "")
 set(gRPC_BUILD_GRPC_RUBY_PLUGIN OFF CACHE BOOL "")
 FetchContent_MakeAvailable(fmt yaml-cpp argparse pybind11 cityproto)
+
+# the CMakelists.txt of avro is in the /lang/c++/ directory
+FetchContent_Declare(
+  avro
+  GIT_REPOSITORY https://github.com/apache/avro
+  GIT_TAG release-1.12.0
+  SOURCE_SUBDIR lang/c++
+)
+FetchContent_MakeAvailable(avro)
 
 add_subdirectory(src)
 

@@ -10,6 +10,7 @@ struct MArrayZeroT {
   static T* New(MemManager* mem, uint size) { return mem->MArrayZero<T>(size); }
 };
 
+// Array wrapper for easy unified memory management
 template <class T, class Allocator>
 class Arr {
  public:
@@ -21,27 +22,27 @@ class Arr {
     size = size_;
     data = size_ ? Allocator::New(mem, size_) : nullptr;
   }
-  __device__ __host__ void Fill(const T& value) const {
+  __host__ __device__ void Fill(const T& value) const {
     for (int i = 0; i < size; ++i) {
       data[i] = value;
     }
   }
-  __device__ __host__ operator bool() const { return size; }
-  __device__ __host__ T* begin() { return data; }
-  __device__ __host__ const T* begin() const { return data; }
-  __device__ __host__ T* end() { return data + size; }
-  __device__ __host__ const T* end() const { return data + size; }
-  __device__ __host__ T& back() { return data[size - 1]; }
-  __device__ __host__ const T& back() const { return data[size - 1]; }
-  __device__ __host__ T& operator[](uint index) {
+  __host__ __device__ operator bool() const { return size; }
+  __host__ __device__ T* begin() { return data; }
+  __host__ __device__ const T* begin() const { return data; }
+  __host__ __device__ T* end() { return data + size; }
+  __host__ __device__ const T* end() const { return data + size; }
+  __host__ __device__ T& back() { return data[size - 1]; }
+  __host__ __device__ const T& back() const { return data[size - 1]; }
+  __host__ __device__ T& operator[](uint index) {
     assert(index < size);
     return data[index];
   }
-  __device__ __host__ const T& operator[](uint index) const {
+  __host__ __device__ const T& operator[](uint index) const {
     assert(index < size);
     return data[index];
   }
-  __device__ __host__ void CopyFrom(const Arr<T, Allocator>& other) {
+  __host__ __device__ void CopyFrom(const Arr<T, Allocator>& other) {
     assert(size == other.size);
     memcpy(data, other.data, size * sizeof(T));
   }

@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include "containers/array.cuh"
-#include "containers/queue.cuh"
 #include "entity//lane/lane.cuh"
 #include "protos.h"
 
@@ -14,7 +13,6 @@ struct MPTLRuntime {
 
 struct MPTrafficLight {
   bool ok;  // 是否启用
-  // TODO: 二维矩阵？
   MArrZ<MArrZ<LightState>>
       phases;  // 可供最大压力算法选择的相位列表（如果nil，则没有信控）
   uint phase_index;                   // 当前相位

@@ -1,8 +1,8 @@
 #ifndef SRC_ENTITY_ROAD_ROAD_CUH_
 #define SRC_ENTITY_ROAD_ROAD_CUH_
 
-#include "fmt/core.h"
 #include "containers/array.cuh"
+#include "fmt/core.h"
 #include "protos.h"
 
 namespace moss {
@@ -17,9 +17,10 @@ struct RoadCheckpoint {
   uint nrl_a, nrl_b;
 };
 
-struct NextRoadLane {
-  uint id;
-  Lane *l1, *l2;  // [l1, l2)
+struct NextRoadLaneGroup {
+  uint next_road_id;
+  // range: [offset1, offset2]
+  uint offset1, offset2;
 };
 
 struct Road {
@@ -29,12 +30,17 @@ struct Road {
   float status;  // 拥堵程度，1~5表示逐渐拥堵
   MArrZ<Lane*> lanes;
   Lane* right_driving_lane;
+  Lane* walking_lane;
   // 可以去往下一条road的车道信息
-  MArrZ<NextRoadLane> next_road_lanes;
+  // the road lanes that can go to the next road
+  MArrZ<NextRoadLaneGroup> next_road_lane_groups;
   // 对于含有动态车道的road，会有多套nrl方案，每套方案对应上述数组的范围在此指定
+  // for roads with dynamic lanes, there are multiple next road lane (nrl)
+  // plans, each plan
   MArrZ<uint> nrl_ranges;
   // 当前启用的next_road_lanes范围，[a,b)
   // 这是为了于给普通道路代码提供fast-path
+  // the current enabled next_road_lanes range, [a,b)
   uint nrl_a, nrl_b;
 };
 
@@ -52,8 +58,6 @@ struct Data {
     }
     return iter->second;
   }
-  void Save(std::vector<RoadCheckpoint>&);
-  void Load(const std::vector<RoadCheckpoint>&);
 };
 }  // namespace road
 

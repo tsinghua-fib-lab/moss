@@ -35,11 +35,27 @@ Q1: How to resolve the error `ImportError: /.../libstdc++.so.6: version 'GLIBCXX
 
 A1: Run `conda install -c conda-forge libstdcxx-ng=12` in the current conda environment.
 
-## V1.0.0 Roadmap
+## Development
 
-- better vehicle model with our best practices
-- linked-list based add/remove buffer to avoid some bug about the size of array
-- AVRO based output
-- a moss-ui project to show the simulation result locally by WebGL
-- cityproto V2
-- better documentation with pdoc website
+#### Build
+
+1. Install Boost
+```bash
+wget -O boost_1_86_0.tar.gz https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.gz
+tar -zxvf boost_1_86_0.tar.gz
+cd boost_1_86_0
+./bootstrap.sh --with-libraries=filesystem,iostreams,program_options,regex,system --prefix=/usr/local  # avro dependency
+./b2 install
+cd ..
+rm -r boost_1_86_0
+rm boost_1_86_0.tar.gz
+```
+
+## From v0.4 to v1.0
+
+That is what we change and why we change it.
+- Focus on the microscopic traffic simulation only (vehicle and pedestrian), no crowd in AOI, no bus for more clear code to support community contribution.
+- No overlap in junction to avoid deadlock following CBLab's design.
+- Can output files with widely-used data format for visualization (visualization is the first for the user to understand the simulation). We choose AVRO as the output format.
+- AOI is just as a marker of the starting/ending point of vehicles/pedestrians, no other functions for more clear code.
+- clear code structure and documentation written in English.

@@ -111,7 +111,7 @@ struct DVector {
   // 预留n的空间
   void Reserve(uint n) {
     assert(!data);
-    mem->DArray(data, n);
+    mem->MArray(data, n);
     capacity = n;
     is_fixed = true;
     // if (capacity < n) {
@@ -144,21 +144,21 @@ struct DVector {
     size = in.size();
     memcpy(data, in.data(), size * sizeof(T));
   }
-  __device__ __host__ void Clear() { size = 0; }
-  __device__ __host__ T* begin() { return data; }
-  __device__ __host__ const T* begin() const { return data; }
-  __device__ __host__ T* end() { return data + size; }
-  __device__ __host__ const T* end() const { return data + size; }
-  __device__ __host__ T& back() { return data[size - 1]; }
-  __device__ __host__ T& operator[](uint index) {
+  __host__ __device__ void Clear() { size = 0; }
+  __host__ __device__ T* begin() { return data; }
+  __host__ __device__ const T* begin() const { return data; }
+  __host__ __device__ T* end() { return data + size; }
+  __host__ __device__ const T* end() const { return data + size; }
+  __host__ __device__ T& back() { return data[size - 1]; }
+  __host__ __device__ T& operator[](uint index) {
     assert(index < size);
     return data[index];
   }
-  __device__ __host__ const T& operator[](uint index) const {
+  __host__ __device__ const T& operator[](uint index) const {
     assert(index < size);
     return data[index];
   }
-  __device__ __host__ operator bool() const { return size; }
+  __host__ __device__ operator bool() const { return size; }
 };
 
 template <class T>
@@ -257,7 +257,7 @@ struct DVectorNoLock {
   }
 
   // 与最后一个元素交换删除
-  __device__ __host__ bool Delete(uint index) {
+  __host__ __device__ bool Delete(uint index) {
     --size;
     if (index != size) {
       data[index] = data[size];
@@ -286,21 +286,21 @@ struct DVectorNoLock {
     memcpy(data, in.data(), size * sizeof(T));
   }
 
-  __device__ __host__ void Clear() { size = 0; }
-  __device__ __host__ T* begin() { return data; }
-  __device__ __host__ const T* begin() const { return data; }
-  __device__ __host__ T* end() { return data + size; }
-  __device__ __host__ const T* end() const { return data + size; }
-  __device__ __host__ T& back() { return data[size - 1]; }
-  __device__ __host__ T& operator[](uint index) {
+  __host__ __device__ void Clear() { size = 0; }
+  __host__ __device__ T* begin() { return data; }
+  __host__ __device__ const T* begin() const { return data; }
+  __host__ __device__ T* end() { return data + size; }
+  __host__ __device__ const T* end() const { return data + size; }
+  __host__ __device__ T& back() { return data[size - 1]; }
+  __host__ __device__ T& operator[](uint index) {
     assert(index < size);
     return data[index];
   }
-  __device__ __host__ const T& operator[](uint index) const {
+  __host__ __device__ const T& operator[](uint index) const {
     assert(index < size);
     return data[index];
   }
-  __device__ __host__ operator bool() const { return size; }
+  __host__ __device__ operator bool() const { return size; }
 };
 
 template <class U, class V>

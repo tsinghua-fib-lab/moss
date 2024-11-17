@@ -8,53 +8,73 @@
 namespace moss {
 
 // 计算指定lane到路由许可车道范围的差距
-__device__ __host__ int LcOffset(const Person& p, const Lane* l) {
-  return l < p.route_l1    ? l - p.route_l1
-         : l >= p.route_l2 ? l - p.route_l2 + 1
-                           : 0;
+// calculate the offset of the given lane to the route lane range
+__host__ __device__ int LcOffset(const Person& p, const Lane* l) {
+  auto offset = l->offset_on_road;
+  if (offset < p.target_offset1) {
+    return p.target_offset1 - offset;
+  } else if (offset > p.target_offset2) {
+    return p.target_offset2 - offset;
+  } else {
+    return 0;
+  }
 }
 
 // 将给定车道转换为路由中的车道
-__device__ __host__ Lane* ToRouteLane(const Person& p, Lane* l) {
-  assert(l->parent_id == p.route.veh->route[p.route_index]);
-  return l < p.route_l1 ? p.route_l1 : l >= p.route_l2 ? p.route_l2 - 1 : l;
+// find out the lane in the route that corresponds to the given lane
+__host__ __device__ Lane* ToRouteLane(const Person& p, Lane* l) {
+  auto* road = l->parent_road;
+  assert(road == p.route->veh->route[p.route_index]);
+  auto offset = l->offset_on_road;
+  if (offset < p.target_offset1) {
+    return road->lanes[p.target_offset1];
+  } else if (offset > p.target_offset2) {
+    return road->lanes[p.target_offset2];
+  } else {
+    return l;
+  }
 }
 
 // 路由前进，如果走完了返回false
-__device__ bool NextRoute(Person& p) {
-  if (p.route_index + 1 == p.route.veh->route.size) {
+// next route, if the route is finished, return false
+__device__ bool Person::NextVehicleRoute() {
+  if (route_index + 1 == route->veh->route.size) {
     return false;
   }
-  p.route_in_junction = !p.route_in_junction;
-  auto* lane = p.runtime.lane = p.next_lane;
-  if (p.route_in_junction) {
-    p.route_lc_offset = 0;
-    p.next_lane = lane->successor;
-  } else {
-    ++p.route_index;
-    p.UpdateLaneRange();
-    p.route_lc_offset = LcOffset(p, lane);
-    p.UpdateNextLane(p.route_lc_offset ? ToRouteLane(p, lane) : lane);
+  // update the runtime lane
+  if (route_index != uint(-1)) {  // not starting the route
+    if (route_in_junction) {
+      // junction lane -> road lane
+      runtime.lane = runtime.lane->successor;
+    } else {
+      // road lane -> junction lane
+      UpdateLaneRange();
+      runtime.lane =
+          FindNextJunctionLane(ToRouteLane(*this, runtime.lane), route_index);
+    }
+    route_in_junction = !route_in_junction;
+  }
+  if (!route_in_junction) {
+    ++route_index;
   }
   return true;
 }
 
 // 更新路由许可车道范围
-__device__ __host__ void Person::UpdateLaneRange() {
-  // TODO: 现在这个函数只在每次进入道路时才调用
-  // 真实情况是，动态车道会在离路口一定距离的位置放置指示牌，车辆在到达指示牌前应该始终检查
-  if (route_index + 1 == route.veh->route.size) {
-    route_l1 = route.veh->end_lane;
-    route_l2 = route_l1 + 1;
+// update the target lane range of the current route segment
+__host__ __device__ void Person::UpdateLaneRange() {
+  if (route_index + 1 == route->veh->route.size) {
+    // if the route is finished, set the lane range to the end lane
+    target_offset1 = target_offset2 = trip->end_lane->offset_on_road;
   } else {
-    auto& r = *runtime.lane->parent_road;
-    auto nr = route.veh->route[route_index + 1];
+    auto* road = runtime.lane->parent_road;
+    auto* next_road = route->veh->route[route_index + 1];
     bool found = false;
-    for (int i = r.nrl_a; i < r.nrl_b; ++i) {
-      auto& x = r.next_road_lanes[i];
-      if (nr == x.id) {
-        route_l1 = x.l1;
-        route_l2 = x.l2;
+    for (int i = road->nrl_a; i < road->nrl_b; ++i) {
+      auto& g = road->next_road_lane_groups[i];
+      if (next_road->id == g.next_road_id) {
+        target_offset1 = g.offset1;
+        target_offset2 = g.offset2;
         found = true;
         break;
       }
@@ -62,29 +82,31 @@ __device__ __host__ void Person::UpdateLaneRange() {
     if (!found) {
       printf(RED("[Error] Person[%d] cannot find lane from Road[%d] to "
                  "Road[%d]\n"),
-             id, r.id, nr);
+             id, road->id, next_road->id);
       SetError(ErrorCode(ErrorType::ANY, 1));
-      route_l1 = runtime.lane;
-      route_l2 = route_l1 + 1;
+      assert(false);
     }
-#ifndef __CUDA_ARCH__
-    throw std::runtime_error(
-        fmt::format("Cannot find lane from Road[{}] to Road[{}]", r.id, nr));
-#endif
   }
 }
 
-// 更新next_lane
-__device__ __host__ void Person::UpdateNextLane(Lane* lane) {
-  next_lane = nullptr;
-  if (route_index + 1 == route.veh->route.size) {
-    return;
+// Find the next junction lane by the current road lane and the route
+__host__ __device__ Lane* Person::FindNextJunctionLane(Lane* road_lane,
+                                                       uint route_index,
+                                                       bool ignore_error) {
+  Lane* next_lane = nullptr;
+  if (route_index + 1 == route->veh->route.size) {
+    if (!ignore_error) {
+      printf(RED("[Error] Cannot find next lane at the end of the route\n"));
+    }
+    return nullptr;
   }
   // 当有多个路口内车道可供选择时，选择后继车道上车最少的
-  uint best = unsigned(-1);
-  uint rid = route.veh->route[route_index + 1];
-  for (auto& i : lane->successors) {
-    if (i.lane->next_road_id == rid) {
+  // When there are multiple lanes to choose from in the junction,
+  // choose the one with the fewest vehicles
+  uint best = uint(-1);
+  auto* road = route->veh->route[route_index + 1];
+  for (auto& i : road_lane->successors) {
+    if (i.lane->successor->parent_road == road) {
       auto c = (i.lane->successor->veh_cnt & 0xffffff) +
                (i.lane->restriction ? 0x1000000 : 0);
       if (c < best) {
@@ -93,851 +115,629 @@ __device__ __host__ void Person::UpdateNextLane(Lane* lane) {
       }
     }
   }
-  if (!next_lane) {
-    printf(RED("[Error] Cannot reach road %d from lane %d\n"), rid,
+  if (!ignore_error && !next_lane) {
+    printf(RED("[Error] Cannot reach road %d from lane %d\n"), road->id,
            runtime.lane->id);
-    assert(false);
+    return nullptr;
   }
-}
 
-// 支持按lane_position初始化车辆
-__device__ void Person::InitVehicleOnLane(float global_time) {
-  runtime.status = PersonStatus::DRIVING;
-  runtime.distance_to_end = max(0.f, route.veh->distance_to_end[0] - runtime.s);
-  UpdateLaneRange();
-  route_lc_offset = LcOffset(*this, runtime.lane);
-  UpdateNextLane(route_lc_offset ? ToRouteLane(*this, runtime.lane)
-                                 : runtime.lane);
-  runtime.lane->veh_add_buffer.Append(&node);
-  traveling_or_departure_time = -global_time;  // 记录出发时间
+  return next_lane;
 }
 
 namespace person {
-// 判定到达终点的距离
+
+// maximum noise of acceleration (m/s^2)
+const float MAX_NOISE_A = 0.5;
+// threshold of zero acceleration checking (m/s^2)
+const float ZERO_A_THRESHOLD = 0.1;
+// the distance to judge the end of the route (unit: meter)
 const float CLOSE_TO_END = 5;
-// IDM参数
+// IDM theta parameter
 const float IDM_THETA = 4;
-// 车道前后不能变道的长度
-const float LC_FORBIDDEN_DISTANCE = 5;
-// 检查(前后不能变道的)车道长度的最小值
-const float LC_CHECK_LANE_MIN_LENGTH = 20;
+// the time factor to sense ahead vehicle (unit: second)
+// https://jtgl.beijing.gov.cn/jgj/94220/aqcs/139634/index.html
+const float VIEW_DISTANCE_FACTOR = 12;
+// the minimum distance to sense ahead vehicle (unit: meter)
+const float MIN_VIEW_DISTANCE = 50;
+// the distance that the vehicle is not allowed to change lane (unit: meter)
+// only at the end of the lane
+const float LC_FORBIDDEN_DISTANCE = 20;
 // 变道长度与车速的关系
+// the multiple factor of the vehicle speed to calculate the lane change length
+// (unit: second)
 const float LC_LENGTH_FACTOR = 3;
-// 随机发起变道概率下限（25秒内90%变道）
-// const float LC_MIN_P = 0.1;
-// 在道路尽头时，5秒内60%变道
-// const float LC_DISTANCE_P_FACTOR = 0.6;
-// 自主变道后期望最少在目标车道停留的长度
-// const float LC_MIN_INTERVAL = 20;
-// 触发变道决策的最小速度增益（m/s）
-const float LC_MIN_CHANGE_SPEED_GAIN = 10 / 3.6;
-// 自主变道估计车速的距离
-const float VIEW_DISTANCE = 200;
-// 自主变道意愿阈值
-__constant__ const float MOTIVATION_THRESHOLD[2] = {6, 7};
-// 自主变道能接受的减速阈值
-const float LC_BRAKING_TOLORENCE = -0.2;
 // 自主变道让后车刹车的加速度阈值相对其最大刹车加速度的偏差
+// the threshold of the deviation of the acceleration that makes the back
+// vehicle brake
 const float LC_SAFE_BRAKING_BIAS = 1;
 
-void Data::SetRoute(int person_index, std::vector<int> route, int end_lane_id,
-                    float end_s) {
-  // 合法性检查
-  if (route.empty()) {
-    throw std::invalid_argument("Route is empty");
-  }
-  for (auto i : route) {
-    if (S->road.road_map.count(i) == 0) {
-      throw std::invalid_argument(fmt::format("Road {} does not exist", i));
-    }
-  }
-  if (person_index >= persons.size) {
-    throw std::out_of_range("Person index out of range");
-  }
-  auto& p = persons[person_index];
-  if (p.runtime.status == PersonStatus::DRIVING ||
-      p.runtime.status == PersonStatus::TO_INSERT) {
-    if (!p.runtime.lane->parent_is_road) {
-      throw std::runtime_error(
-          "Cannot set vehicle route when it is inside junctions");
-    }
-    if (p.runtime.lane->parent_road->id != route.at(0)) {
-      throw std::invalid_argument(
-          "The first road in the route must be the current road");
-    }
-  } else {
-    throw std::runtime_error(
-        fmt::format("Cannot set vehicle route when the status is {}",
-                    (int)p.runtime.status));
-  }
-  Lane* end_lane;
-  if (end_lane_id == -1) {
-    end_lane = S->road.At(route[route.size() - 1])->right_driving_lane;
-    if (!end_lane) {
-      throw std::invalid_argument(fmt::format(
-          "Road {} does not have a drivable lane", route[route.size() - 1]));
-    }
-  } else {
-    auto it = S->lane.lane_map.find(end_lane_id);
-    if (it == S->lane.lane_map.end()) {
-      throw std::invalid_argument(
-          fmt::format("Lane {} does not exist", end_lane_id));
-    }
-    end_lane = it->second;
-  }
-  if (end_s < 0) {
-    end_s += end_lane->length;
-  }
-  end_s = max(0, min(end_s, end_lane->length));
-
-  // 更新路由数据
-  auto* v = S->mem->MValueZero<routing::VehicleRoute>();
-  auto& r = v->route;
-  auto n = route.size();
-  r.New(S->mem, n);
-  for (int i = 0; i < n; ++i) {
-    r[i] = route[i];
-  }
-  auto& d = v->distance_to_end;
-  d.New(S->mem, 2 * n - 1);
-  v->end_s = end_s;
-  v->end_lane = end_lane;
-  v->end_lane->GetPosition(v->end_s, v->end_x, v->end_y);
-  for (int i = n - 2; i >= 0; --i) {
-    uint nr = route[i + 1];
-    bool reachable = false;
-    for (auto* l : S->road.At(route[i])->lanes) {
-      if (l->type == LaneType::LANE_TYPE_DRIVING) {
-        for (auto& ll : l->successors) {
-          if (ll.lane->next_road_id == nr) {
-            d[2 * i + 1] = ll.lane->length;
-            d[2 * i] = l->length;
-            reachable = true;
-            break;
-          }
-        }
-        if (reachable) {
-          break;
-        }
-      }
-    }
-    if (!reachable) {
-      throw std::invalid_argument(fmt::format(
-          "Wrong route: cannot reach Road[{}] from Road[{}]", nr, route[i]));
-    }
-  }
-  double s = v->end_s;
-  d.back() = (float)s;
-  for (int i = d.size - 2; i >= 0; --i) {
-    d[i] = s += d[i];
-  }
-
-  // 更新路由状态
-  p.route.veh = v;
-  p.route_changed = true;
-  if (p.runtime.status == PersonStatus::DRIVING) {
-    p.route_index = 0;
-    p.runtime.distance_to_end =
-        max(0.f, p.route.veh->distance_to_end[0] - p.runtime.s);
-    p.UpdateLaneRange();
-    auto* lane =
-        p.runtime.is_lane_changing ? p.runtime.shadow_lane : p.runtime.lane;
-    p.route_lc_offset = LcOffset(p, lane);
-    p.UpdateNextLane(p.route_lc_offset ? ToRouteLane(p, lane) : lane);
-  }
+// compute the phi (front wheel steering angle) of the vehicle when changing
+// lane
+__host__ __device__ float GetLCPhi(float v) {
+  // constant values
+  // we assume the phi is 30 degrees when the vehicle is stopped (0 m/s)
+  // is 5 degrees when the vehicle is driving at 25 m/s
+  const float k = (5.0 - 25.0) / (25.0 - 0.0);
+  const float b = 30.0;
+  return max(k * v + b, 5) * PI / 180;
 }
 
-__device__ float ProjectFromLane(Lane* src_lane, Lane* dest_lane, float s) {
-  assert(src_lane->parent_id == dest_lane->parent_id);
-  return Clamp(s / src_lane->length * dest_lane->length, 0.f,
-               dest_lane->length);
-}
-
-__device__ float ProjectToLaneSide(Lane* lane, uint side, float s) {
-  auto* l2 = lane->side_lanes[side];
-  return Clamp(s / lane->length * l2->length, 0.f, l2->length);
-}
-
-__device__ void ClearLaneChange(PersonState& runtime) {
-  runtime.shadow_lane = nullptr;
-  runtime.shadow_s = 0;
-  runtime.lc_total_length = 0;
-  runtime.lc_complete_length = 0;
-  runtime.is_lane_changing = false;
-}
-
-// 变道完成
-__device__ void FinishLaneChange(Person& p, Lane* lane, float s) {
-  p.runtime.lane = lane;
-  p.runtime.s = s;
-  if (p.route_changed) {
-    return;
-  }
-  assert(p.route_lc_offset);
-  if (p.route_lc_offset > 0) {
-    --p.route_lc_offset;
-  } else {
-    ++p.route_lc_offset;
-  }
-  if (!p.route_lc_offset) {
-    p.UpdateNextLane(lane);
-  }
-}
-
-// 从(lane,s)直行ds的距离并更新位置
-__device__ void DriveStraightAndRefreshLocation(Person& p, float ds) {
-  auto& s = p.runtime.s;
-  auto& lane = p.runtime.lane;
-  s += ds;
-  // 如果走完了当前车道
-  if (s > lane->length) {
-    // 清除变道
-    if (p.runtime.shadow_lane) {
-#if !PERF
-      printf(RED("[Warning]vehicle: vehicle %u skipped the change to lane %u "
-                 "(status=%u)\n"),
-             p.id, p.runtime.shadow_lane->id, p.runtime.is_lane_changing);
-#endif
-      ClearLaneChange(p.runtime);
-    }
-    while (s > lane->length) {
-      s -= lane->length;
-#if !PERF
-      if (p.route_lc_offset != 0) {
-        printf(RED("[Warning] teleport: veh %d lane %d length=%.2f s=%.2f "
-                   "ds=%.2f\n"),
-               p.id, lane->id, lane->length, s, ds);
-      }
-#endif
-      // 前进一步
-      if (!NextRoute(p)) {
-        p.skip_to_end = true;
-        return;
-      }
-    }
-  }
-}
-
-// 计算在给定距离内改变速度所需的加速度
-// __device__ float ComputeAcc(float v_end, float v_now, float distance) {
-//   return (v_end * v_end - v_now * v_now) / 2.f / max(distance, 1e-6f);
-// }
-// 计算采用给定加速度刹停所需的距离
-// __device__ float ComputeBreakingDistance(float v, float acc) {
-//   assert(acc < 0);
-//   return v * v * .5f / -acc;
-// }
-// __device__ float ComputeBreakingDistance(float v1, float v2, float acc) {
-//   assert(acc < 0);
-//   return (v1 * v1 - v2 * v2) * .5f / -acc;
-// }
-// Krauss跟车模型
-// 记本车为B，前车为A，本时刻速度为v_B和v_A，那么本车下一时刻的速度u需要满足
-// 下一时刻本车普通刹车的刹车距离 + 本时刻距离 <= 前车急刹的距离+现有距离
-// u^2/(2a_B)+(v_B+u)t/2 ≤ (v_A^2)/(2a_A)+d
-// distance: 本车车头到前车车尾的距离
-// __device__ float KraussCarFollowAcc(Person& p, float step_interval,
-//                                     float ahead_speed,
-//                                     float ahead_max_breaking_acc,
-//                                     float distance) {
-//   if (distance <= 0) {
-//     return p.attr.max_braking_acc;
-//   }
-//   float a = .5f / -p.attr.usual_braking_acc;
-//   float b = .5f * step_interval;
-//   float c = .5f * p.snapshot.speed * step_interval -
-//             ahead_speed * ahead_speed * .5f / -ahead_max_breaking_acc +
-//             p.attr.min_gap - distance;
-//   float delta = b * b - 4 * a * c;
-//   if (delta < 0) {
-//     // 紧急刹车
-//     return p.attr.max_braking_acc;
-//   }
-//   float target_speed = max(0.f, (-b + sqrt(delta)) * .5f / a);
-//   return Clamp((target_speed - p.snapshot.speed) / step_interval,
-//                p.attr.usual_braking_acc, p.attr.usual_acc);
-// }
-
-// IDM跟车模型
-__device__ float IDMCarFollowAcc(const Person& p, float target_speed,
+// IDM Car Following Model
+__device__ float IDMCarFollowAcc(Person& p, float target_speed,
                                  float ahead_speed, float distance,
-                                 float headway) {
+                                 float min_gap, float headway) {
   if (distance <= 0) {
-    return p.attr.max_braking_acc;
+    // collision
+    return -1e999;
   }
-  auto v = p.snapshot.speed;
-  auto s = p.attr.min_gap +
-           max(0, v * (headway +
-                       (v - ahead_speed) / 2.f /
-                           sqrt(-p.attr.usual_braking_acc * p.attr.max_acc)));
-  return p.attr.max_acc *
-         (1 - pow(v / target_speed, IDM_THETA) - pow(s / distance, 2));
+  auto v = p.snapshot.v;
+  // https://en.wikipedia.org/wiki/Intelligent_driver_model
+  auto s =
+      min_gap + max(0, v * (headway + (v - ahead_speed) / 2.f /
+                                          sqrt(-p.veh_attr.usual_braking_a *
+                                               p.veh_attr.max_a)));
+  auto acc = p.veh_attr.max_a *
+             (1 - pow(v / target_speed, IDM_THETA) - pow(s / distance, 2));
+  return Clamp<float>(acc, p.veh_attr.max_braking_a, p.veh_attr.max_a);
 }
 
+// person runtime updater
 __device__ void SetAcc(Person& p, float acc, AccReason reason,
                        uint reason_detail = 0) {
-  if (acc < p.runtime.acc) {
-    p.runtime.acc = acc;
+  if (acc < p.acc) {
+    p.acc = acc;
     p._reason = reason;
     p._reason_detail = reason_detail;
   }
 }
 
-// 限速
-__device__ void PolicyToLimit(Person& p, float step_interval) {
-  float max_speed = min(p.attr.max_speed, p.snapshot.lane->max_speed);
-  if (p.snapshot.is_lane_changing) {
-    max_speed = min(max_speed, p.snapshot.shadow_lane->max_speed);
-  }
-  SetAcc(p, IDMCarFollowAcc(p, max_speed, 1e999, 1e999, 0),
-         AccReason::TO_LIMIT);
+__device__ float GetLaneMaxV(const Person& p, const Lane* lane) {
+  return min(p.veh_attr.max_v,
+             lane->max_speed * p.veh_attr.lane_max_v_deviation);
 }
 
-// 跟车
-__device__ float _CarFollow(Person& p, PersonNode& node, Lane* lane,
-                            float step_interval, uint& ahead_id) {
-  // 感知前车
-  ahead_id = (uint)-1;
-  p.ahead_dist = -1;
-  if (node.front) {
-    auto* v = node.front->self;
-    ahead_id = v->id;
-    p.ahead_dist = node.front->s - node.s - v->attr.length;
-    return IDMCarFollowAcc(p, min(p.attr.max_speed, lane->max_speed),
-                           v->snapshot.speed, p.ahead_dist, p.attr.headway);
-  } else if (p.next_lane) {
-    auto* n = p.next_lane->veh_head;
-    if (n) {
-      auto* v = n->self;
-      ahead_id = v->id;
-      p.ahead_dist = n->s + lane->length - node.s - v->attr.length;
-      return IDMCarFollowAcc(p, min(p.attr.max_speed, lane->max_speed),
-                             v->snapshot.speed, p.ahead_dist, p.attr.headway);
-    }
-  }
-  //  KraussCarFollowAcc(p, step_interval, ahead_veh->snapshot.speed,
-  //                     ahead_veh->attr.max_braking_acc,
-  //                     ahead_s - node.s - ahead_veh->attr.length)
-  return 1e999;
-}
-__device__ void PolicyCarFollow(Person& p, float step_interval) {
-  uint ahead_id;
-  float acc = _CarFollow(p, p.node, p.snapshot.lane, step_interval, ahead_id);
-  SetAcc(p, acc, AccReason::CAR_FOLLOW, ahead_id);
-}
-__device__ void PolicyShadowCarFollow(Person& p, float step_interval) {
-  uint ahead_id;
-  float acc = _CarFollow(p, p.shadow_node, p.snapshot.shadow_lane,
-                         step_interval, ahead_id);
-  SetAcc(p, acc, AccReason::CAR_FOLLOW_SHADOW, ahead_id);
-}
-
-// 下一车道
-__device__ float LaneAhead(Person& p, float step_interval, float distance,
-                           uint junction_blocking_count, uint& reason_detail) {
-  if (!p.next_lane) {
-    return 1e999;
-  }
-  // 前路段限行
-  bool stop = p.next_lane->restriction;
-  if (stop) {
-    reason_detail = 0;
-  } else if (!p.next_lane->parent_is_road) {  // 信控
-    stop = p.next_lane->veh_cnt > junction_blocking_count;
-    if (stop) {
-      reason_detail = 1;
-    } else
-      switch (p.next_lane->light_state) {
-        case LightState::LIGHT_STATE_RED:
-          // 红灯减速停车
-          reason_detail = 2;
-          stop = true;
-          break;
-        case LightState::LIGHT_STATE_YELLOW:
-          // 黄灯，倒计时结束前不可过线，减速停车
-          if (p.next_lane->light_time * p.snapshot.speed <= distance) {
-            reason_detail = 3;
-            stop = true;
-          }
-          break;
-        default:
-          break;
-          // 绿灯或没灯，跳过
-      }
-  }
-  if (stop) {
-    return IDMCarFollowAcc(p, 1e999, 0, distance - 1.f, step_interval);
-  }
-  // 下一车道限速
-  float v1 = p.snapshot.speed;
-  float v2 = p.next_lane->max_speed;
-  if (p.next_lane->parent_junction && p.next_lane->successor) {
-    v2 = min(v2, p.next_lane->successor->max_speed);
-  }
-  if (v1 > v2 && v1 * max(step_interval, p.attr.headway) > distance) {
-    reason_detail = 4;
-    return (v2 * v2 - v1 * v1) / 2 / max(0.1, distance);
-  }
-  return 1e999;
-}
-__device__ void PolicyLaneAhead(Person& p, float step_interval,
-                                uint junction_blocking_count) {
-  uint reason_detail;
-  float acc =
-      LaneAhead(p, step_interval, p.snapshot.lane->length - p.snapshot.s,
-                junction_blocking_count, reason_detail);
-  SetAcc(p, acc, AccReason::LANE_AHEAD, reason_detail);
-}
-__device__ void PolicyShadowLaneAhead(Person& p, float step_interval,
-                                      uint junction_blocking_count) {
-  uint reason_detail;
-  float acc =
-      LaneAhead(p, step_interval, p.snapshot.shadow_lane->length - p.snapshot.s,
-                junction_blocking_count, reason_detail);
-  SetAcc(p, acc, AccReason::LANE_AHEAD_SHADOW, reason_detail);
-}
-
-// 终点前减速
-__device__ void PolicyToEnd(Person& p, float step_interval) {
-  SetAcc(p, IDMCarFollowAcc(p, 1e999, 0, p.snapshot.distance_to_end, 0),
-         AccReason::TO_END);
-}
-
-/*变道相关*/
-struct LaneChangeEnv {
-  // 变道距离
-  float distance;
-  // 变道目标车道
-  Lane* side_lane;
-  // 变道目标车道的s、前后车
-  float side_s;
-  PersonNode *side_front, *side_back;
-};
-
-__device__ void GetLaneChangeEnv(const Person& p, LaneChangeEnv& env,
-                                 float step_interval) {
-  // 变道距离 = 刹车距离 + 变道次数 * 变道预留距离
-  env.distance =
-      p.snapshot.speed *
-          (p.snapshot.speed / -p.attr.usual_braking_acc / 2 + step_interval) +
-      abs(p.route_lc_offset) * p.attr.lane_change_length;
-  if (p.route_lc_offset) {
-    auto side = p.route_lc_offset > 0 ? LEFT : RIGHT;
-    env.side_lane = p.snapshot.lane->side_lanes[side];
-    env.side_s = ProjectFromLane(p.snapshot.lane, env.side_lane, p.snapshot.s);
-    auto& fb = p.node.sides[side];
-    env.side_front = fb[FRONT];
-    env.side_back = fb[BACK];
-  }
-}
-
-// 检测是否会让后车追尾
-__device__ bool TestBackCrash(Person& p, float s, PersonNode* back) {
-  auto& v = *back->self;
-  return IDMCarFollowAcc(v, v.snapshot.lane->max_speed, p.snapshot.speed,
-                         s - p.attr.length - v.snapshot.s,
-                         v.attr.headway) < v.attr.max_braking_acc;
-}
-
-// 路由强制变道
-__device__ void PlanNecessaryLaneChange(Person& p, LaneChangeEnv& env,
-                                        float step_interval) {
-  auto l = p.snapshot.lane->length, remain_s = l - p.snapshot.s;
-  // 如果剩余距离足够且车道长度超过20m，那么车道前后5m不变道
-  if (remain_s >= env.distance && l > LC_CHECK_LANE_MIN_LENGTH &&
-      (p.snapshot.s < LC_FORBIDDEN_DISTANCE ||
-       remain_s < LC_FORBIDDEN_DISTANCE)) {
+// Look ahead: sense + decision, including
+// car-following, traffic light, lane restriction
+__device__ void LookAhead(Person& p, PersonNode* ahead_node, Lane* lane,
+                          float s, float dt) {
+  // check if you are not fully enter the lane
+  // but the traffic light of the lane becomes red
+  // STOP!!!
+  if (lane->light_state == LightState::LIGHT_STATE_RED &&
+      p.snapshot.s < p.veh_attr.length) {
+    SetAcc(p, p.veh_attr.max_braking_a, AccReason::RED_LIGHT);
     return;
   }
-  // 设置lane_change_length>0之后，会在外层修改状态
-  p.runtime.lc_length = Clamp(p.snapshot.speed * LC_LENGTH_FACTOR,
-                              p.attr.length * 3, p.attr.lane_change_length);
-  if (abs(p.route_lc_offset) == 1) {
-    p.UpdateNextLane(env.side_lane);
-  }
-  if (env.side_front) {
-    // auto d = env.side_front->s - env.side_s -
-    // env.side_front->self->attr.length; if (d <
-    //     1 + p.runtime.speed * p.runtime.speed / 2 / -p.attr.max_braking_acc)
-    //     {
-    //   p.runtime.speed = 0;
-    //   p._reason_detail = 0;
-    //   SetAcc(p, -1e999, AccReason::LANE_CHANGE_HARD_STOP);
-    // }
-    //  KraussCarFollowAcc(p, step_interval,
-    //                     env.side_front->self->snapshot.speed,
-    //                     env.side_front->self->attr.max_braking_acc,
-    //                     env.side_front->s -
-    //                     env.side_s-env.side_front->self->attr.length)
-    SetAcc(
-        p,
-        IDMCarFollowAcc(
-            p, p.snapshot.lane->max_speed, env.side_front->self->snapshot.speed,
-            env.side_front->s - env.side_s - env.side_front->self->attr.length,
-            p.attr.headway),
-        AccReason::LANE_CHANGE_N, env.side_front->self->id);
-  }
-}
 
-// 变道后的期望速度
-__device__ float ExpectedSpeed(Lane* lane, PersonNode* ahead, float v,
-                               float s) {
-  float end = min(s + VIEW_DISTANCE, lane->length);
-  float max_v = lane->max_speed;
-  if (ahead) {
-    float ahead_v = ahead->self->snapshot.speed;
-    float ahead_s = ahead->s;
-    float k = (ahead_s - s) * (v / (v - ahead_v)) / (end - s);
-    if (ahead_s <= end && ahead_v < v && k < 1) {
-      return max_v * k + ahead_v * (1 - k);
-    }
-  }
-  return max_v;
-}
+  // ahead vehicle result
+  uint ahead_id = (uint)-1;
+  p.ahead_dist = 1e999;
 
-// 自主变道
-__device__ float PlanVoluntaryLaneChange(Person& p, float step_interval) {
-  // 前方车道距离过近
-  if (p.snapshot.lane->length - p.snapshot.s < p.attr.min_gap) {
-    return 1e999;
+  // total view distance
+  auto view_distance =
+      max(MIN_VIEW_DISTANCE, p.snapshot.v * VIEW_DISTANCE_FACTOR);
+  // scanned distance
+  auto scan_distance = lane->length - p.snapshot.s;
+  // flag to indicate whether the car following action is done.
+  bool followed = false;
+
+  auto max_v = GetLaneMaxV(p, lane);
+
+  // if ahead_node is too close to the vehicle, maybe the two vehicles are
+  // overlapped, skip the ahead_node
+  if (ahead_node && ahead_node->s - s < 1e-2) {
+    ahead_node = nullptr;
   }
-  float acc = 1e999;
-  float v = ExpectedSpeed(p.snapshot.lane, p.node.front, p.snapshot.speed,
-                          p.snapshot.s);
-  for (auto&& side : {LEFT, RIGHT}) {
-    auto& target = p.snapshot.lane->side_lanes[side];
-    // 主动变道的目标车道应该允许执行DelayRoute，如果不能够delay的话，不应该纳入候选集内
-    if (!target || target->restriction || LcOffset(p, target) != 0) {
-      continue;
-    }
-    auto s = ProjectFromLane(p.snapshot.lane, target, p.snapshot.s);
-    auto dv =
-        ExpectedSpeed(target, p.node.sides[side][FRONT], s, p.snapshot.speed) -
-        v - LC_MIN_CHANGE_SPEED_GAIN;
-    if (dv > 0) {
-      p.lc_motivation[side] += dv * step_interval;
+
+  // check the front vehicle on the same lane
+  if (ahead_node) {
+    auto* ahead = ahead_node->self;
+    ahead_id = ahead->id;
+    p.ahead_dist = ahead_node->s - s - ahead->veh_attr.length;
+    // ACC [*] consider the lane max speed
+    // but ignore the lane's restriction and traffic light
+    auto acc = IDMCarFollowAcc(p, max_v, ahead->snapshot.v, p.ahead_dist,
+                               p.veh_attr.min_gap, p.veh_attr.headway);
+    SetAcc(p, acc, AccReason::CAR_FOLLOW, ahead_id);
+    followed = true;
+  } else {
+    SetAcc(p, IDMCarFollowAcc(p, max_v, 1e999, 1e999, 0, 0),
+           AccReason::TO_LIMIT);
+  }
+  auto route_index = lane->parent_is_road ? p.route_index : p.route_index + 1;
+  // check the next lanes
+  while (scan_distance < view_distance) {
+    // check both lane and vehicle
+    // lane: max speed, restriction, light state
+    // vehicle: car-following
+
+    if (lane->parent_is_road) {
+      lane = p.FindNextJunctionLane(lane, route_index, true);
+      ++route_index;
     } else {
-      p.lc_motivation[side] *= pow(.5, step_interval);
+      lane = lane->successor;
     }
-    if (p.lc_motivation[side] >= MOTIVATION_THRESHOLD[side]) {
-      // 执行主动变道
-      auto* n = p.node.sides[side][BACK];
-      if (n &&
-          TestBackCrash(
-              p, ProjectToLaneSide(p.snapshot.lane, side, p.snapshot.s), n)) {
-        // 变道会让后车撞车
-        continue;
-      }
-      n = p.node.sides[side][FRONT];
-      if (n) {
-        auto* v = n->self;
-        // float acc = KraussCarFollowAcc(p, step_interval, v->snapshot.speed,
-        //                                v->attr.max_braking_acc,
-        //                                n->s - p.node.s - v->attr.length);
-        acc = IDMCarFollowAcc(p, min(p.attr.max_speed, target->max_speed),
-                              v->snapshot.speed,
-                              n->s - p.node.s - v->attr.length, p.attr.headway);
-        if (acc < LC_BRAKING_TOLORENCE) {
-          // 变道会减速
-          continue;
-        }
-      }
-      p.lc_motivation[LEFT] = p.lc_motivation[RIGHT] = 0;
-      // 开启变道
-      p.route_lc_offset = side == LEFT ? 1 : -1;
-      p.runtime.lc_length = Clamp(p.snapshot.speed * LC_LENGTH_FACTOR,
-                                  p.attr.length * 3, p.attr.lane_change_length);
-      p.UpdateNextLane(target);
+    if (!lane) {
       break;
     }
+    max_v = GetLaneMaxV(p, lane);
+    if (lane->restriction || !lane->parent_is_road) {
+      // restriction or junction lane
+      // try to keep more safe distance to the line (2m)
+      // use dt as headway to predict the future position
+      auto stop_acc = IDMCarFollowAcc(p, max_v, 0, scan_distance,
+                                      p.veh_attr.min_gap + 2, dt);
+      if (lane->restriction) {
+        // ACC [*]: lane restriction
+        SetAcc(p, stop_acc, AccReason::LANE_AHEAD, lane->id);
+      } else {
+        assert(!lane->parent_is_road);
+        // traffic light
+        switch (lane->light_state) {
+          case LightState::LIGHT_STATE_RED: {
+            // ACC [*]: red light
+            SetAcc(p, stop_acc, AccReason::RED_LIGHT, lane->id);
+          } break;
+          case LightState::LIGHT_STATE_YELLOW: {
+            // ACC [*]: yellow light
+            // if the vehicle can stop before the line, stop
+            if (lane->light_time * p.snapshot.v <= scan_distance) {
+              SetAcc(p, stop_acc, AccReason::YELLOW_LIGHT, lane->id);
+            }
+          } break;
+          default:
+            // green light or no light, skip
+            break;
+        }
+      }
+    }
+
+    // check the front vehicle on the new lane
+    if (!followed) {
+      // ACC [*]
+      auto* ahead_node = lane->veh_head;
+      if (ahead_node) {
+        auto* ahead = ahead_node->self;
+        ahead_id = ahead->id;
+        p.ahead_dist =
+            scan_distance + ahead->snapshot.s - ahead->veh_attr.length;
+        auto acc = IDMCarFollowAcc(p, max_v, ahead->snapshot.v, p.ahead_dist,
+                                   p.veh_attr.min_gap, p.veh_attr.headway);
+        SetAcc(p, acc, AccReason::CAR_FOLLOW, ahead_id);
+        followed = true;
+      }
+    }
+    scan_distance += lane->length;
   }
-  return acc;
+  assert(p._reason != AccReason::NONE);
 }
 
-// MOBIL自主变道算法
-__device__ float PlanMOBILLaneChange(Person& p, float a0, float step_interval,
-                                     float mobil_lc_forbidden_distance) {
-  // 考虑[0]->[5]的变道
+__device__ void PlanLaneChange(Person& p, float t, float dt) {
+  // the remaining distance to the end of the lane
+  float reverse_s = p.snapshot.lane->length - p.snapshot.s;
+  // lane max speed
+  float max_v = p.snapshot.lane->max_speed;
+  // lane change distance (>= vehicle length)
+  float lc_length = max(p.veh_attr.length, p.snapshot.v * LC_LENGTH_FACTOR);
+  // update target lane range
+  p.UpdateLaneRange();
+  // route_lc_offset > 0 means the vehicle is on the left side of the target
+  // lane, and should change lane to the right side
+  // route_lc_offset < 0 means the vehicle is on the right side of the target
+  // lane, and should change lane to the left side
+  auto route_lc_offset = LcOffset(p, p.snapshot.lane);
+  // check necessary lane change
+  // condition 1: the vehicle should change lane
+  // condition 2: there are no enough space to drive
+  if (route_lc_offset != 0 && reverse_s <= lc_length * abs(route_lc_offset)) {
+    // START FORCE LANE CHANGE
+    p.force_lc = true;
+  } else if (route_lc_offset == 0) {
+    // EXIT FORCE LANE CHANGE
+    p.force_lc = false;
+  }
+  if (p.force_lc) {
+    // at the left/right side of the target lane, the vehicle should change lane
+    // to the right/left side
+    auto side = route_lc_offset > 0 ? RIGHT : LEFT;
+    auto target = p.snapshot.lane->side_lanes[side];
+    p.lc_last_t = t;
+    p.lc_target = target;
+    float target_s = ProjectFromLane(p.snapshot.lane, target, p.snapshot.s);
+    LookAhead(p, p.node.sides[side][FRONT], target, target_s, dt);
+    // slow down when forcing lane change
+    SetAcc(p, p.veh_attr.usual_braking_a, AccReason::LANE_CHANGE_N);
+    p.lc_phi = 0;
+    // check the vehicle behind
+    // because you are forcing to change lane, you should check the back vehicle
+    // and drive slow to avoid rear-end
+    if (p.node.sides[side][BACK]) {
+      auto& back = *p.node.sides[side][BACK]->self;
+      auto a3 =
+          IDMCarFollowAcc(back, min(back.veh_attr.max_v, max_v), p.snapshot.v,
+                          target_s - p.veh_attr.length - back.snapshot.s,
+                          back.veh_attr.min_gap, back.veh_attr.headway);
+      // if the back vehicle cannot stop before the vehicle, slow down
+      // TODO: not good enough
+      if (a3 < min(back.veh_attr.usual_braking_a + LC_SAFE_BRAKING_BIAS, -1)) {
+        SetAcc(p, p.veh_attr.max_braking_a, AccReason::LANE_CHANGE_N);
+      }
+    }
+    return;
+  }
+
+  // MOBIL
+
+  // too close to the end of the lane
+  if (reverse_s < LC_FORBIDDEN_DISTANCE) {
+    return;
+  }
+  // too short lane changing interval (4s~6s)
+  if (t - p.lc_last_t < p.rng.Rand() * 2 + 4) {
+    return;
+  }
+  // no side lanes
+  if (!p.snapshot.lane->side_lanes[LEFT] &&
+      !p.snapshot.lane->side_lanes[RIGHT]) {
+    return;
+  }
+
+  // GO TO MOBIL [*]
+  // Consider the lane change motivation from [0] to [5]
   // ---------------------
   //   [3] -> [5] -> [4]
   // ----------↑----------
   //   [2] -> [0] -> [1]
   // ---------------------
   // 要求变道后：
+  // Required after lane change:
   // 1. [3]不会追尾[5]：预期加速度不能小于安全刹车加速度+LC_SAFE_BRAKING_BIAS
-  // 2. 整体加速度提升大于阈值: da = da0 + α*(da2+da3) - β > 0
+  // 1. [3] will not rear-end [5]: the expected acceleration cannot be less than
+  // the safe braking acceleration + LC_SAFE_BRAKING_BIAS
+  // 2. 整体加速度提升大于阈值: da = da0 + α*(da2+da3) > 0
+  // 2. The overall acceleration increase is greater than the threshold: da =
+  // da0 + α*(da2+da3) > 0
+  // 3. 变道后只能接近可达到下一道路的车道集合，不能远离或离开
+  // 3. After changing lanes, you can only approach the set of lanes that can
+  // reach the next road, not move away or leave
 
-  const float alpha = 0.1, beta = 0;
-
-  // 前方车道距离过近
-  if (p.snapshot.lane->length - p.snapshot.s < LC_CHECK_LANE_MIN_LENGTH) {
-    return 1e999;
-  }
-  float v_max = p.snapshot.lane->max_speed;
-  float v0 = p.snapshot.speed;
-  float s0 = p.snapshot.s - p.attr.length;
-  // [1]的位置和速度
-  float v1 = 1e999, s1 = 1e999;
+  const float alpha = 0.1;
+  // [0]
+  float v0 = p.snapshot.v;
+  float s0_head = p.snapshot.s;
+  float s0_tail = s0_head - p.veh_attr.length;
+  // [1]
+  float v1 = 1e999, s1_tail = 1e999;
   if (p.node.front) {
     auto& p1 = *p.node.front->self;
-    v1 = p1.snapshot.speed;
-    s1 = p1.snapshot.s - p1.attr.length;
+    v1 = p1.snapshot.v;
+    s1_tail = p1.snapshot.s - p1.veh_attr.length;
   }
-  // [2]的加速度变化量
+  float a0 =
+      IDMCarFollowAcc(p, min(max_v, p.veh_attr.max_v), v1, s1_tail - s0_head,
+                      p.veh_attr.min_gap, p.veh_attr.headway);
+  // [2]
   float da2 = 0;
   if (p.node.back) {
     auto& p2 = *p.node.back->self;
-    da2 = IDMCarFollowAcc(p2, min(v_max, p2.attr.max_speed), v1,
-                          s1 - p2.snapshot.s, p2.attr.headway) -
-          IDMCarFollowAcc(p2, min(v_max, p2.attr.max_speed), v0,
-                          s0 - p2.snapshot.s, p2.attr.headway);
+    // if [0] changes lane, compute the acceleration difference for [2]
+    da2 = IDMCarFollowAcc(p2, min(max_v, p2.veh_attr.max_v), v1,
+                          s1_tail - p2.snapshot.s, p2.veh_attr.min_gap,
+                          p2.veh_attr.headway) -
+          IDMCarFollowAcc(p2, min(max_v, p2.veh_attr.max_v), v0,
+                          s0_tail - p2.snapshot.s, p2.veh_attr.min_gap,
+                          p2.veh_attr.headway);
   }
-  // [5]的加速度（考虑左右两侧变道）
+  // [5] (both side)
   float a5[] = {0, 0};
-  // 加速度判别式（考虑左右两侧变道）
-  float da[] = {-1, -1};
+  float s5[] = {0, 0};
+  // // 加速度判别式（考虑左右两侧变道）
+  float da[] = {0, 0};
   for (auto&& side : {LEFT, RIGHT}) {
     auto& target = p.snapshot.lane->side_lanes[side];
-    // 主动变道的目标车道应该在可选车道范围内
-    if (!target || target->restriction || LcOffset(p, target) != 0) {
+    if (!target || target->restriction) {
+      // no side lane or the side lane is restricted, skip
       continue;
     }
-    v_max = target->max_speed;
-    // [4]的位置和速度
-    float v4 = 1e999, s4 = 1e999;
+    if (route_lc_offset == 0) {
+      if (LcOffset(p, target) != 0) {
+        // if the vehicle is in the route lane range,
+        // the target lane is out of the route lane range, skip
+        continue;
+      }
+    } else {
+      if (route_lc_offset * (side == LEFT ? 1 : -1) > 0) {
+        // if the vehicle is changing lane to the opposite side, skip
+        // means more far from the target lane
+        continue;
+      }
+    }
+    float max_v = target->max_speed;
+    // [4]
+    float v4 = 1e999, s4_tail = 1e999;
     if (p.node.sides[side][FRONT]) {
       auto& p4 = *p.node.sides[side][FRONT]->self;
-      v4 = p4.snapshot.speed;
-      s4 = p4.snapshot.s - p4.attr.length;
+      v4 = p4.snapshot.v;
+      s4_tail = p4.snapshot.s - p4.veh_attr.length;
     }
-    float s5 = ProjectFromLane(p.snapshot.lane, target, p.snapshot.s);
-    // 太近了不变道
-    if (s4 - s5 <
-        mobil_lc_forbidden_distance + p.snapshot.speed * step_interval) {
-      continue;
-    }
-    a5[side] = IDMCarFollowAcc(p, min(p.attr.max_speed, v_max), v4, s4 - s5,
-                               p.attr.headway);
+    float s5_head = ProjectFromLane(p.snapshot.lane, target, p.snapshot.s);
+    s5[side] = s5_head;
+    a5[side] =
+        IDMCarFollowAcc(p, min(p.veh_attr.max_v, max_v), v4, s4_tail - s5_head,
+                        p.veh_attr.min_gap, p.veh_attr.headway);
+    // [3]
     float da3 = 0;
     if (p.node.sides[side][BACK]) {
       auto& p3 = *p.node.sides[side][BACK]->self;
-      float a3 =
-          IDMCarFollowAcc(p3, min(p3.attr.max_speed, v_max), v0,
-                          s5 - p.attr.length - p3.snapshot.s, p3.attr.headway);
-      if (a3 < p3.attr.max_braking_acc + LC_SAFE_BRAKING_BIAS) {
+      float s5_tail = s5_head - p.veh_attr.length;
+      float a3 = IDMCarFollowAcc(p3, min(p3.veh_attr.max_v, max_v), v0, s5_tail,
+                                 p3.veh_attr.min_gap, p3.veh_attr.headway);
+      if (a3 < p3.veh_attr.max_braking_a + LC_SAFE_BRAKING_BIAS) {
+        // [3] will rear-end [5], skip
         continue;
       }
-      da3 = a3 - IDMCarFollowAcc(p3, min(p3.attr.max_speed, v_max), v4,
-                                 s4 - p3.snapshot.s, p3.attr.headway);
+      da3 = a3 - IDMCarFollowAcc(p3, min(p3.veh_attr.max_v, max_v), v4,
+                                 s4_tail - p3.snapshot.s, p3.veh_attr.min_gap,
+                                 p3.veh_attr.headway);
     }
-    da[side] = max(0, a5[side] - a0 + alpha * (da2 + da3) - beta);
+    da[side] = max(0, a5[side] - a0 + alpha * (da2 + da3));
   }
-  if (da[0] > 0 || da[1] > 0) {
-    // 决定变道方向
-    int side;
-    if (da[0] <= 0) {
-      side = 1;
-    } else if (da[1] <= 0) {
-      side = 0;
-    } else {
-      side = (da[0] + da[1]) * p.rng.Rand() > da[0] ? 1 : 0;
+
+  // Follow: Shuo Feng, Xintao Yan, Haowei Sun, Yiheng Feng, and Henry X Liu.
+  // Intelligent driving intelligence test for autonomous vehicles with
+  // naturalistic and adversarial environment. Nature communications, 12(1):748,
+  // 2021.
+  float u = da[0] + da[1];
+  float p_lc = 2e-8;
+  if (u >= 1) {
+    p_lc = 0.9;
+  } else if (u > 0) {
+    p_lc = (0.9 - 2e-8) * u;
+  } else {
+    // da[0] == da[1] == 0
+    if (p.snapshot.lane->side_lanes[LEFT]) {
+      da[LEFT] = 1;
     }
-    // 按概率变道
-    if (p.rng.PTrue(0.9 * min(1, da[side]))) {
-      p.route_lc_offset = side == LEFT ? 1 : -1;
-      p.runtime.lc_length = Clamp(p.snapshot.speed * LC_LENGTH_FACTOR,
-                                  p.attr.length * 3, p.attr.lane_change_length);
-      p.UpdateNextLane(p.snapshot.lane->side_lanes[side]);
-      return a5[side];
+    if (p.snapshot.lane->side_lanes[RIGHT]) {
+      da[RIGHT] = 1;
     }
   }
-  return 1e999;
+  // start lane change by probability
+  if (p.rng.PTrue(p_lc)) {
+    // choose side by probability
+    u = da[LEFT] + da[RIGHT];
+    float random = p.rng.Rand() * u;
+    int side = random < da[LEFT] ? LEFT : RIGHT;
+    p.lc_target = p.snapshot.lane->side_lanes[side];
+    SetAcc(p, a5[side], AccReason::LANE_CHANGE_V);
+    LookAhead(p, p.node.sides[side][FRONT], p.lc_target, s5[side], dt);
+    p.lc_last_t = t;
+    p.lc_phi = 0;
+  }
 }
 
 // 加速度和变道决策 (entity/person/vehicle/controller.go)
-__device__ void UpdateAction(Person& p, float step_interval,
-                             uint junction_blocking_count,
-                             LaneChangeAlgorithm lane_change_algorithm,
-                             float mobil_lc_forbidden_distance) {
-  float acc;
-  p.runtime.acc = 1e999;
+__device__ void UpdateAction(Person& p, float t, float dt) {
+  p.acc = p.veh_attr.max_a + MAX_NOISE_A;
+  p.lc_target = nullptr;
+  p.lc_phi = 0;
   p._reason = AccReason::NONE;
-  // 变道长度，也用于标记是否发起变道
-  p.runtime.lc_length = 0;
-  // 加速度决策
-  PolicyToLimit(p, step_interval);
-  PolicyToEnd(p, step_interval);
-  // 变道时只考虑目标车道的情况
-  if (p.snapshot.is_lane_changing) {
-    // 变道撞车情况下强制刹车
-    // if (p.shadow_node.front && p.shadow_node.front->s - p.shadow_node.s <
-    //                                3 + p.runtime.speed * p.runtime.speed / 2
-    //                                /
-    //                                        -p.attr.max_braking_acc) {
-    //   p.runtime.speed = 0;
-    //   p.runtime.acc = p.attr.max_braking_acc;
-    //   p._reason = AccReason::LANE_CHANGE_HARD_STOP;
-    //   p._reason_detail = 1;
-    // } else {
-    PolicyShadowCarFollow(p, step_interval);
-    PolicyShadowLaneAhead(p, step_interval, junction_blocking_count);
-    // }
-  } else {
-    PolicyCarFollow(p, step_interval);
-    PolicyLaneAhead(p, step_interval, junction_blocking_count);
+
+  // decide acceleration
+  LookAhead(p, p.node.front, p.snapshot.lane, p.snapshot.s, dt);
+  if (p.snapshot.shadow_lane) {
+    // if changing lane, check the shadow lane
+    LookAhead(p, p.shadow_node.front, p.snapshot.shadow_lane,
+              p.snapshot.shadow_s, dt);
   }
-  // 变道决策
-  if (!p.snapshot.is_lane_changing && p.snapshot.lane->parent_is_road) {
-    LaneChangeEnv env{};
-    GetLaneChangeEnv(p, env, step_interval);
-    if (p.route_lc_offset) {
-      PlanNecessaryLaneChange(p, env, step_interval);
-    } else if (lane_change_algorithm != LaneChangeAlgorithm::NONE) {
-      if (lane_change_algorithm == LaneChangeAlgorithm::SUMO) {
-        acc = PlanVoluntaryLaneChange(p, step_interval);
+  // decide whether to change lane
+  if (!p.snapshot.shadow_lane && p.snapshot.lane->parent_is_road) {
+    PlanLaneChange(p, t, dt);
+  }
+  // decide angle when lane changing
+  if (p.snapshot.shadow_lane) {
+    p.lc_phi = GetLCPhi(p.snapshot.v);
+  }
+
+  Clamp_(p.acc, p.veh_attr.max_braking_a, p.veh_attr.max_a);
+  // add small noise to break perfect symmetry
+  auto noise = MAX_NOISE_A * (2 * p.rng.Rand() - 1);
+  // do not disturb zero acceleration, do not change the sign of acceleration
+  if (abs(p.acc) >= ZERO_A_THRESHOLD && p.acc * (p.acc + noise) > 0) {
+    p.acc += noise;
+  }
+}
+
+// refresh vehicle runtime
+__device__ void RefreshRuntime(Person& p, float dt, float* out_ds,
+                               bool* out_skip_to_end) {
+  p.traveling_time += dt;
+  bool skip_to_end = false;
+  // compute ds and dv
+  float dv = p.acc * dt;
+  float d;
+  if (p.runtime.v + dv < 0) {
+    // compute the distance to stop (no reverse)
+    p.runtime.v = 0;
+    d = -p.runtime.v * p.runtime.v / (2 * p.acc);
+  } else {
+    p.runtime.v += dv;
+    d = (p.runtime.v + dv / 2) * dt;
+  }
+  p.total_distance += d;
+
+  // adopt Ackermann steering geometry
+
+  float width = (p.runtime.lane->width + (p.lc_target ? p.lc_target->width
+                                          : p.runtime.shadow_lane
+                                              ? p.runtime.shadow_lane->width
+                                              : p.runtime.lane->width)) /
+                2;
+  float max_yaw = min(PI / 6, asinf(width / p.veh_attr.length));
+  float dyaw = d / (p.veh_attr.length / 2) * tan(p.lc_phi);
+
+  float yaw = p.snapshot.shadow_lane ? p.snapshot.lc_yaw : 0;
+  float old_yaw = yaw;
+  yaw += dyaw;
+  if (yaw > max_yaw) {
+    yaw = max_yaw;
+  }
+  float mean_yaw = (old_yaw + yaw) / 2;
+  // compute vertical offset
+  float dw = d * sinf(mean_yaw);
+  // compute forward distance
+  float ds = d * cosf(mean_yaw);
+
+  // update runtime
+
+  if (p.lc_target) {
+    assert(p.lc_target->type == LaneType::LANE_TYPE_DRIVING);
+    // prepare to change lane
+    if (p.runtime.shadow_lane) {
+      // changing lane, reset it
+      // Status 1: the new target is the current lane, do nothing
+      // Status 2: the new target is the shadow lane, completed_ratio = 1 -
+      // completed_ratio
+      // Status 3: the new target is the other neighbor of the
+      // shadow lane, put the vehicle back to the shadow lane (revert the lane
+      // changing)
+      // Status 4: the new target is the other neighbor of the lane, finish the
+      // lane changing
+      if (p.lc_target == p.runtime.lane) {
+        // status 1
+      } else if (p.lc_target == p.runtime.shadow_lane) {
+        // status 2
+        p.runtime.lc_completed_ratio = 1 - p.runtime.lc_completed_ratio;
+        // swap lane and shadow lane
+        auto tmp = p.runtime.lane;
+        p.runtime.lane = p.runtime.shadow_lane;
+        p.runtime.shadow_lane = tmp;
+        // swap s and shadow_s
+        auto tmp_s = p.runtime.s;
+        p.runtime.s = p.runtime.shadow_s;
+        p.runtime.shadow_s = tmp_s;
+      } else if (p.lc_target == p.runtime.shadow_lane->side_lanes[LEFT] ||
+                 p.lc_target == p.runtime.shadow_lane->side_lanes[RIGHT]) {
+        // status 3
+        p.runtime.lc_completed_ratio = 0;
+        p.runtime.lane = p.lc_target;
+        p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
+                                      p.runtime.shadow_s);
+        // do not need to update shadow_s
+      } else if (p.lc_target == p.runtime.lane->side_lanes[LEFT] ||
+                 p.lc_target == p.runtime.lane->side_lanes[RIGHT]) {
+        // status 4
+        p.runtime.shadow_lane = p.runtime.lane;
+        // do not need to update shadow_s
+        p.runtime.lc_completed_ratio = 0;
+        p.runtime.lane = p.lc_target;
+        p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
+                                      p.runtime.shadow_s);
       } else {
-        acc = PlanMOBILLaneChange(p, p.runtime.acc, step_interval,
-                                  mobil_lc_forbidden_distance);
+        printf(RED("[Error]vehicle: invalid lane change target\n"));
+        assert(false);
       }
-      if (acc < p.runtime.acc) {
-        p.runtime.acc = acc;
-        p._reason = AccReason::LANE_CHANGE_V;
-      }
+    } else {
+      // start lane changing, map the current vehicle position to the target
+      //  --------------------------------------------
+      //   [2] → → (lane_change_length / ds) → → [3]
+      //  --↑-----------------------------------------
+      //   [1]     (ignore the width)
+      //  --------------------------------------------
+      // 1: motion.lane + motion.s
+      // 2: target_lane + neighbor_s
+      // 3: target_lane + target_s
+      p.runtime.shadow_lane = p.runtime.lane;
+      p.runtime.shadow_s = p.runtime.s;
+      p.runtime.lc_completed_ratio = 0;
+      p.runtime.lane = p.lc_target;
+      p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
+                                    p.runtime.shadow_s);
     }
   }
 
-  // TODO: 路口内的处理
-  Clamp_(p.runtime.acc, p.attr.max_braking_acc, p.attr.max_acc);
+  // Drive straight and refresh location
+  auto& s = p.runtime.s;
+  auto& lane = p.runtime.lane;
+  s += ds;
+  // if go out of the lane, go into the next lane
+  if (s > lane->length) {
+    // clean lane change related data
+    p.runtime.shadow_lane = nullptr;
+    p.runtime.shadow_s = 0;
+    p.runtime.lc_yaw = 0;
+    p.runtime.lc_completed_ratio = 0;
+    while (s > lane->length) {
+      s -= lane->length;
+      // next route
+      if (!p.NextVehicleRoute()) {
+        skip_to_end = true;
+        break;
+      }
+    }
+    p.runtime.s = s;
+  }
+  if (p.runtime.shadow_lane) {
+    // is lane changing
+    float total_width =
+        (p.runtime.lane->width + p.runtime.shadow_lane->width) / 2;
+    float ratio = p.runtime.lc_completed_ratio + dw / total_width;
+    if (ratio >= 1) {
+      // finish lane changing
+      p.runtime.shadow_lane = nullptr;
+      p.runtime.shadow_s = 0;
+      p.runtime.lc_yaw = 0;
+      p.runtime.lc_completed_ratio = 0;
+    } else {
+      p.runtime.lc_completed_ratio = ratio;
+      p.runtime.shadow_s =
+          ProjectFromLane(p.runtime.lane, p.runtime.shadow_lane, p.runtime.s);
+      p.runtime.lc_yaw = yaw;
+    }
+  }
+
+  *out_ds = ds;
+  *out_skip_to_end = skip_to_end;
 }
 
-// 车辆位置更新
-__device__ void RefreshRuntime(Person& p, float step_interval) {
-  // 计算位移和速度
-  float dv = p.runtime.acc * step_interval;
-  float ds;
-  if (p.runtime.speed + dv < 0) {
-    // 计算减速到停止的移动距离（不能倒车）
-    ds = -p.runtime.speed * p.runtime.speed / (2 * p.runtime.acc);
-    p.runtime.speed = 0;
-  } else {
-    ds = (p.runtime.speed + dv / 2) * step_interval;
-    p.runtime.speed += dv;
-  }
-  // if (p.runtime.lc_length > 0) {
-  //   // 发起变道
-  //   Lane* target_lane =
-  //       p.snapshot.lane->side_lanes[p.route_lc_offset > 0 ? LEFT : RIGHT];
-  //   //  --------------------------------------------
-  //   //   [2] → → (lane_change_length / ds) → → [3]
-  //   //  --↑-----------------------------------------
-  //   //   [1]     (ignore the width)
-  //   //  --------------------------------------------
-  //   // 1: (snapshot.lane, snapshot.s)
-  //   // 2: (target_lane, neighbor_s)
-  //   // 3: (target_lane, target_s)
-  //   float neighbor_s =
-  //       ProjectFromLane(p.runtime.lane, target_lane, p.runtime.s);
-  //   // 变道必须在当前道路内完成
-  //   float target_s = min(neighbor_s + p.runtime.lc_length,
-  //   target_lane->length); if (neighbor_s + ds >= target_s) {
-  //     // 如果距离不足则直接完成变道
-  //     FinishLaneChange(p, target_lane, neighbor_s);
-  //     DriveStraightAndRefreshLocation(p, ds);
-  //   } else {
-  //     //  --------------------------------------------
-  //     //   [ns] → → → → [ns+ds] → → → → [ts]
-  //     //  --------------------------------------------
-  //     //   [1]            [s]
-  //     //  --------------------------------------------
-  //     // ns: neighbor_s
-  //     // ds: ds
-  //     // ts: target_s
-  //     // s: motion.s
-  //     p.runtime.is_lane_changing = true;
-  //     p.runtime.shadow_lane = target_lane;
-  //     p.runtime.shadow_s = neighbor_s + ds;
-  //     p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
-  //                                   p.runtime.shadow_s);
-  //     p.runtime.lc_total_length = target_s - neighbor_s;
-  //     p.runtime.lc_complete_length = ds;
-  //     p.lc_dir = atan2((p.runtime.lane->width + target_lane->width) / 2,
-  //                      p.runtime.lc_total_length);
-  //     if (p.route_lc_offset < 0) {
-  //       p.lc_dir = -p.lc_dir;
-  //     }
-  //   }
-  // } else if (p.runtime.is_lane_changing) {
-  //   // 正在变道
-  //   if (p.runtime.lc_complete_length + ds >= p.runtime.lc_total_length) {
-  //     // 变道完成
-  //     FinishLaneChange(p, p.runtime.shadow_lane, p.runtime.shadow_s);
-  //     DriveStraightAndRefreshLocation(p, ds);
-  //     ClearLaneChange(p.runtime);
-  //   } else {
-  //     p.runtime.shadow_s += ds;
-  //     p.runtime.s = ProjectFromLane(p.runtime.shadow_lane, p.runtime.lane,
-  //                                   p.runtime.shadow_s);
-  //     p.runtime.lc_complete_length += ds;
-  //   }
-  // } else {
-  //   // 直行
-  //   DriveStraightAndRefreshLocation(p, ds);
-  // }
-  if (p.runtime.lc_length > 0) {
-    Lane* target_lane =
-        p.snapshot.lane->side_lanes[p.route_lc_offset > 0 ? LEFT : RIGHT];
-    float neighbor_s =
-        ProjectFromLane(p.runtime.lane, target_lane, p.runtime.s);
-    FinishLaneChange(p, target_lane, neighbor_s);
-  }
-  DriveStraightAndRefreshLocation(p, ds);
-  p.runtime.distance_to_end = max(
-      p.route.veh->distance_to_end[2 * p.route_index + p.route_in_junction] -
-          p.runtime.s,
-      0.f);
-}
-
-__device__ void UpdateVehicle(Person& p, float global_time, float step_interval,
-                              uint junction_blocking_count,
-                              uint lane_change_algorithm,
-                              float mobil_lc_forbidden_distance) {
-  // TODO: 限行重新申请路由
+__device__ bool UpdateVehicle(Person& p, float t, float dt) {
 #if not NDEBUG
   assert(p.runtime.lane->parent_is_road == !p.route_in_junction);
   if (!p.route_in_junction) {
-    assert(p.runtime.lane->parent_id == p.route.veh->route[p.route_index]);
+    assert(p.runtime.lane->parent_road == p.route->veh->route[p.route_index]);
   }
 #endif
-  UpdateAction(p, step_interval, junction_blocking_count,
-               (LaneChangeAlgorithm)lane_change_algorithm,
-               mobil_lc_forbidden_distance);
-  RefreshRuntime(p, step_interval);
+  UpdateAction(p, t, dt);
+  float ds;
+  bool skip_to_end;
+  RefreshRuntime(p, dt, &ds, &skip_to_end);
 #if not NDEBUG
-  if (p.route_index < p.route.veh->route.size) {
+  if (p.route_index < p.route->veh->route.size) {
     assert(p.runtime.lane->parent_is_road == !p.route_in_junction);
     if (!p.route_in_junction) {
-      assert(p.runtime.lane->parent_id == p.route.veh->route[p.route_index]);
+      assert(p.runtime.lane->parent_road == p.route->veh->route[p.route_index]);
     }
   }
 #endif
 #if STUCK_MONITOR
-  if (abs(p.runtime.speed) < 0.01) {
+  if (abs(p.runtime.v) < 0.01) {
     p.stuck_cnt += 1;
-    if (p.stuck_cnt > 100) {
-      atomicInc(&stuck_cnt, ALL_BIT);
+    if (p.stuck_cnt > 50) {
+      // atomicInc(&stuck_cnt, ALL_BIT);
       assert(!p.node.front || p.node.s <= p.node.front->s);
       assert(!(p.runtime.shadow_lane && p.shadow_node.front) ||
              p.shadow_node.s <= p.shadow_node.front->s);
-      // printf("%d (%d,%.3f,%d,%.3f,%d) (%d,%.3f,%d,%.3f,%d)\n", p.id,
-      //        p.runtime.lane->id, p.node.s,
-      //        p.node.front ? p.node.front->self->id : -1,
-      //        p.node.front ? p.node.front->s : -1,
-      //        p.node.front ? p.node.front->is_shadow : -1,
-      //        p.runtime.shadow_lane ? p.runtime.shadow_lane->id : -1,
-      //        p.shadow_node.s,
-      //        p.shadow_node.front ? p.shadow_node.front->self->id : -1,
-      //        p.shadow_node.front ? p.shadow_node.front->s : -1,
-      //        p.shadow_node.front ? p.shadow_node.front->is_shadow : -1);
+      printf("%d %d (%d,%.3f,%d,%.3f,%d) (%d,%.3f,%d,%.3f,%d) (%.3f,%d,%d)\n",
+             p.id, p.runtime.status, p.runtime.lane->id, p.node.s,
+             p.node.front ? p.node.front->self->id : -1,
+             p.node.front ? p.node.front->s : -1,
+             p.node.front ? p.node.front->is_shadow : -1,
+             p.runtime.shadow_lane ? p.runtime.shadow_lane->id : -1,
+             p.shadow_node.s,
+             p.shadow_node.front ? p.shadow_node.front->self->id : -1,
+             p.shadow_node.front ? p.shadow_node.front->s : -1,
+             p.shadow_node.front ? p.shadow_node.front->is_shadow : -1, p.acc,
+             p._reason, p._reason_detail);
     }
   } else {
     p.stuck_cnt = 0;
@@ -948,36 +748,51 @@ __device__ void UpdateVehicle(Person& p, float global_time, float step_interval,
   //     ".3f\n",
   //     p.id, p.runtime.lane->id, p.runtime.s, p.runtime.lane->length,
   //     p.runtime.shadow_lane ? p.runtime.shadow_lane->id : -1,
-  //     p.route_index, p.route.veh->route.size, p.runtime.speed,
+  //     p.route_index, p.route->veh->route.size, p.runtime.speed,
   //     p.runtime.acc);
-  if (p.skip_to_end || p.runtime.distance_to_end <= CLOSE_TO_END) {
-    p.is_end = true;
-    return;
-  }
 
-  // TODO: 路口
-  // 通过junction的车辆进行重路由，lane -> lane
-  // 检查是否通过路口，且不能是最后一条路
-
-  // 链表更新
-  if (p.snapshot.lane != p.runtime.lane) {
-    p.snapshot.lane->veh_remove_buffer.Append(&p.node);
-    p.runtime.lane->veh_add_buffer.Append(&p.node);
-  }
-  bool last_lc = p.snapshot.is_lane_changing,
-       now_lc = p.runtime.is_lane_changing;
-  if (last_lc) {
-    if (now_lc) {
-      if (p.snapshot.shadow_lane != p.runtime.shadow_lane) {
-        p.snapshot.shadow_lane->veh_remove_buffer.Append(&p.shadow_node);
-        p.runtime.shadow_lane->veh_add_buffer.Append(&p.shadow_node);
-      }
-    } else {
-      p.snapshot.shadow_lane->veh_remove_buffer.Append(&p.shadow_node);
+  // check if the vehicle is at the end
+  if (skip_to_end ||
+      p.runtime.lane->parent_road == p.trip->end_lane->parent_road &&
+          p.trip->end_s - p.runtime.s <= CLOSE_TO_END) {
+    // END!
+    p.runtime = {
+        .lane = p.trip->end_lane,
+        .s = p.trip->end_s,
+        .aoi = p.trip->end_aoi,
+        .v = 0,
+    };
+    // delete vehicle from the lane's linked list
+    p.snapshot.lane->veh_remove_buffer.Add(&p.node.remove_node);
+    if (p.snapshot.shadow_lane) {
+      p.snapshot.shadow_lane->veh_remove_buffer.Add(&p.shadow_node.remove_node);
     }
-  } else if (now_lc) {
-    p.runtime.shadow_lane->veh_add_buffer.Append(&p.shadow_node);
+    return true;
   }
+
+  // update the linked list
+  if (p.snapshot.lane != p.runtime.lane) {
+    p.snapshot.lane->veh_remove_buffer.Add(&p.node.remove_node);
+    p.runtime.lane->veh_add_buffer.Add(&p.node.add_node);
+  }
+  if (!p.snapshot.InShadowLane() && !p.runtime.InShadowLane()) {
+    // do nothing
+  } else if (p.snapshot.InShadowLane() && !p.runtime.InShadowLane()) {
+    // remove old
+    p.snapshot.shadow_lane->veh_remove_buffer.Add(&p.shadow_node.remove_node);
+  } else if (!p.snapshot.InShadowLane() && p.runtime.InShadowLane()) {
+    // add new
+    p.runtime.shadow_lane->veh_add_buffer.Add(&p.shadow_node.add_node);
+  } else {
+    if (p.snapshot.shadow_lane != p.runtime.shadow_lane) {
+      // delete old
+      p.snapshot.shadow_lane->veh_remove_buffer.Add(&p.shadow_node.remove_node);
+      // add new
+      p.runtime.shadow_lane->veh_add_buffer.Add(&p.shadow_node.add_node);
+    }
+  }
+
+  return false;
 }
 }  // namespace person
 }  // namespace moss

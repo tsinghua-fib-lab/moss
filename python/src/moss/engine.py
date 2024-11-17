@@ -1,9 +1,7 @@
 import importlib
 import importlib.machinery
 import importlib.util
-import json
 import os
-import pickle
 import threading
 from enum import Enum
 from glob import glob
@@ -11,10 +9,12 @@ from typing import Dict, List, Tuple, Union
 
 import numpy as np
 from numpy.typing import NDArray
+from pycityproto.city.map.v2.map_pb2 import Map
+from pycityproto.city.person.v2.person_pb2 import Persons
 
-from .agent import Agents
-from .convert import convert_from_cityflow, save_pb
-from .map import Map
+from .convert import pb2dict
+
+__all__ = ["Engine", "TlPolicy", "Verbosity", "PersonStatus"]
 
 
 def _import():
@@ -37,83 +37,17 @@ class TlPolicy(Enum):
     NONE = 3
 
 
-class LaneChange(Enum):
-    """
-    `NONE`: Vehicles will not do lane change according to road condition.
-
-    `SUMO`: Vehicles will attempt to switch to a faster lane, as in SUMO.
-
-    `MOBIL`: Vehicles will take the action that maximize the change in acceleration of self and affected vehicles, as in MOBIL.
-    """
-
-    NONE = 0
-    SUMO = 1
-    MOBIL = 2
-
-
 class Verbosity(Enum):
     NO_OUTPUT = 0
     INIT_ONLY = 1
     ALL = 2
 
 
-class VehicleInfo:
-    class Status(Enum):
-        INIT = 0
-        TO_INSERT = 1
-        SLEEP = 2
-        CROWD = 3
-        WAITING_FOR_LEAVING = 4
-        WALKING = 5
-        DRIVING = 6
-        FINISHED = 7
-
-    class Reason(Enum):
-        NONE = 0
-        LANE_CHANGE_N = 1
-        LANE_CHANGE_V = 2
-        TO_LIMIT = 3
-        TO_END = 4
-        CAR_FOLLOW = 5
-        CAR_FOLLOW_SHADOW = 6
-        LANE_AHEAD = 7
-        LANE_AHEAD_SHADOW = 8
-        LANE_CHANGE_HARD_STOP = 9
-
-    class State:
-        def __init__(self, info):
-            (
-                status,
-                self.lane,
-                self.s,
-                self.shadow_s,
-                self.speed,
-                self.is_lane_changing,
-                self.shadow_lane,
-                self.lc_length,
-                self.lc_length,
-                self.lc_total_length,
-                self.lc_complete_length,
-            ) = info
-            self.status = VehicleInfo.Status(status)
-
-    def __init__(self, info):
-        misc, drive, snapshot, runtime, route = info
-        (self.start_time,) = misc
-        (
-            self.v,
-            self.acc,
-            reason,
-            self.reason_detail,
-            self.front_id,
-            self.nl_id,
-            self.nl_speed,
-            self.nl_state,
-        ) = drive
-        self.acc_reason = self.Reason(reason)
-        self.snapshot = self.State(snapshot)
-        self.runtime = self.State(runtime)
-        self.route, self.route_index, self.route_lc_offset = route
+class PersonStatus(Enum):
+    SLEEP = 0
+    WALKING = 1
+    DRIVING = 2
+    FINISHED = 3
 
 
 class Engine:
@@ -127,32 +61,50 @@ class Engine:
 
     def __init__(
         self,
+        name: str,
         map_file: str,
-        agent_file: str,
-        id_file: str = "",
+        person_file: str,
         start_step: int = 0,
         step_interval: float = 1,
         seed: int = 43,
         verbose_level=Verbosity.NO_OUTPUT,
-        agent_limit: int = -1,
-        disable_aoi_out_control: bool = False,
-        disable_junction: bool = False,
-        junction_blocking_count: int = -1,
+        person_limit: int = -1,
         junction_yellow_time: float = 0,
         phase_pressure_coeff: float = 1.5,
-        lane_change: LaneChange = LaneChange.MOBIL,
-        mobil_lc_forbidden_distance: float = 15,
-        lane_veh_add_buffer_size: int = 1000,
-        lane_veh_remove_buffer_size: int = 1000,
-        speed_stat_interval=0,
-        enable_output=True, # TODO: fix the segfault when set to False
-        out_xmin=-1e999,
-        out_ymin=-1e999,
-        out_xmax=1e999,
-        out_ymax=1e999,
+        speed_stat_interval: int = 0,
+        output_dir: str = "",
+        out_xmin: float = -1e999,
+        out_ymin: float = -1e999,
+        out_xmax: float = 1e999,
+        out_ymax: float = 1e999,
         device: int = 0,
         device_mem: float = 0,
     ):
+        """
+        Args:
+        - name: The name of the task (for directory naming in output)
+        - map_file: The path to the map file (Protobuf format)
+        - person_file: The path to the person file (Protobuf format)
+        - start_step: The starting step of the simulation
+        - step_interval: The interval of each step (unit: seconds)
+        - seed: The random seed
+        - verbose_level: The verbosity level
+        - person_limit: The maximum number of persons to simulate (-1 means no limit)
+        - junction_yellow_time: The yellow time of the junction traffic light
+        - phase_pressure_coeff: The coefficient of the phase pressure
+        - speed_stat_interval: The interval of speed statistics. Set to `0` to disable speed statistics.
+        - output_dir: The AVRO output directory
+        - out_xmin: The minimum x coordinate of the output bounding box
+        - out_ymin: The minimum y coordinate of the output bounding box
+        - out_xmax: The maximum x coordinate of the output bounding box
+        - out_ymax: The maximum y coordinate of the output bounding box
+        - device: The CUDA device index
+        - device_mem: The memory limit of the CUDA device (unit: GiB). Set to `0` to use the self-adaptive mode (80% of the free GPU memory).
+        """
+
+        self._fetched_persons = None
+        self._fetched_lanes = None
+
         assert junction_yellow_time >= 0
         if not hasattr(_thread_local, "device"):
             _thread_local.device = device
@@ -161,27 +113,24 @@ class Engine:
                 "Cannot create multiple Engines on different device! Use moss.parallel.ParallelEngine instead."
             )
         self.speed_stat_interval = speed_stat_interval
+        """
+        The interval of speed statistics. Set to `0` to disable speed statistics.
+        """
         if speed_stat_interval < 0:
             raise ValueError("Cannot set speed_stat_interval to be less than 0")
         self._e = _moss.Engine(
+            name,
             map_file,
-            agent_file,
+            person_file,
             start_step,
             step_interval,
             seed,
             verbose_level.value,
-            agent_limit,
-            disable_aoi_out_control,
-            disable_junction,
-            junction_blocking_count,
+            person_limit,
             junction_yellow_time,
             phase_pressure_coeff,
-            lane_change.value,
-            mobil_lc_forbidden_distance,
-            lane_veh_add_buffer_size,
-            lane_veh_remove_buffer_size,
             speed_stat_interval,
-            enable_output,
+            output_dir,
             out_xmin,
             out_ymin,
             out_xmax,
@@ -189,109 +138,126 @@ class Engine:
             device,
             device_mem,
         )
-        self.map_file = map_file
-        self.agent_file = agent_file
+        self._map = Map()
+        with open(map_file, "rb") as f:
+            self._map.ParseFromString(f.read())
+        self.id2lanes = {lane.id: lane for lane in self._map.lanes}
+        """
+        Dictionary of lanes (Protobuf format) indexed by lane id
+        """
+        self.id2roads = {road.id: road for road in self._map.roads}
+        """
+        Dictionary of roads (Protobuf format) indexed by road id
+        """
+        self.id2junctions = {junction.id: junction for junction in self._map.junctions}
+        """
+        Dictionary of junctions (Protobuf format) indexed by junction id
+        """
+        self.id2aois = {aoi.id: aoi for aoi in self._map.aois}
+        """
+        Dictionary of AOIs (Protobuf format) indexed by AOI id
+        """
+
+        self.lane_index2id = self.fetch_lanes()["id"]
+        """
+        Numpy array of lane ids indexed by lane index
+        """
+        self.junc_index2id = self._e.get_junction_ids()
+        """
+        Numpy array of junction ids indexed by junction index
+        """
+        self.road_index2id = self._e.get_road_ids()
+        """
+        Numpy array of road ids indexed by road index
+        """
+        self.lane_id2index = {v.item(): k for k, v in enumerate(self.lane_index2id)}
+        """
+        Dictionary of lane index indexed by lane id
+        """
+        self.junc_id2index = {v.item(): k for k, v in enumerate(self.junc_index2id)}
+        """
+        Dictionary of junction id indexed by junction index
+        """
+        self.road_id2index = {v.item(): k for k, v in enumerate(self.road_index2id)}
+        """
+        Dictionary of road index indexed by road id
+        """
+
+        self._persons = Persons()
+        with open(person_file, "rb") as f:
+            self._persons.ParseFromString(f.read())
+        self._map_bbox = (out_xmin, out_ymin, out_xmax, out_ymax)
         self.start_step = start_step
-        self.lane_cnt = self._e.get_lane_count()
-        self.enable_output = enable_output
+        """
+        The starting step of the simulation
+        """
+
         self.device = device
-        if id_file:
-            self.has_id = True
-            ids = pickle.load(open(id_file, "rb"))
-            self.id2road = ids["road"]
-            self.id2lane = ids["lane"]
-            self.id2junc = ids["junction"]
-            self.id2agent = ids["agent"]
-            self.junc2id = {j: i for i, j in enumerate(self.id2junc)}
-        else:
-            self.has_id = False
-
-    @staticmethod
-    def convert_map_agent(
-        in_map: str,
-        in_agent: str,
-        out_map: str,
-        out_agent: str,
-        out_id: str,
-        max_agent_start_time=1e999,
-    ):
-        raise NotImplementedError  # FIXME
-        _map, _agents, ids = convert_from_cityflow(
-            data_map=json.load(open(in_map, "rb")),
-            data_agents=json.load(open(in_agent, "rb")),
-            max_agent_start_time=max_agent_start_time,
-        )
-        save_pb(_map, out_map)
-        save_pb(_agents, out_agent)
-        pickle.dump(ids, open(out_id, "wb"))
-
-    @staticmethod
-    def from_cityflow(
-        cityflow_config: dict, output_path=None, max_agent_start_time=1e999
-    ):
-        raise NotImplementedError  # FIXME
-        map_file = cityflow_config["roadnetFile"]
-        agent_file = cityflow_config["flowFile"]
-        if output_path is None:
-            output_path = os.path.dirname(os.path.abspath(map_file))
-        os.makedirs(output_path, exist_ok=True)
-        Engine.convert_map_agent(
-            in_map=map_file,
-            in_agent=agent_file,
-            out_map=output_path + "/_moss_map.bin",
-            out_agent=output_path + "/_moss_agent.bin",
-            out_id=output_path + "/_moss_id.bin",
-            max_agent_start_time=max_agent_start_time,
-        )
-        return Engine(
-            map_file=output_path + "/_moss_map.bin",
-            agent_file=output_path + "/_moss_agent.bin",
-            id_file=output_path + "/_moss_id.bin",
-            start_step=0,
-            step_interval=cityflow_config["interval"],
-            seed=cityflow_config["seed"],
-            verbose=False,
-        )
+        """
+        The CUDA device index
+        """
 
     @property
-    def vehicle_count(self) -> int:
+    def person_count(self) -> int:
         """
         The number of vehicles in the agent file
         """
-        return self._e.get_vehicle_count()
+        return len(self._persons.persons)
 
     @property
     def lane_count(self) -> int:
         """
         The number of lanes
         """
-        return self._e.get_lane_count()
+        return len(self.id2lanes)
 
     @property
     def road_count(self) -> int:
         """
         The number of roads
         """
-        return self._e.get_road_count()
+        return len(self.id2roads)
 
     @property
     def junction_count(self) -> int:
         """
         The number of junctions
         """
-        return self._e.get_junction_count()
+        return len(self.id2junctions)
 
-    def get_map(self):
+    def get_map(self, dict_return: bool = True) -> Union[Map, Dict]:
         """
-        Get the Map object
-        """
-        return Map(self.map_file)
+        Get the Map object.
+        Map is a protobuf message defined in `pycityproto.city.map.v2.map_pb2` in the `pycityproto` package.
+        The documentation url is https://docs.fiblab.net/cityproto#city.map.v2.Map
 
-    def get_agents(self):
+        Args:
+        - dict_return: Whether to return the object as a dictionary
+
+        Returns:
+        - The Map object or the dictionary
         """
-        Get the Agents object
+        if dict_return:
+            return pb2dict(self._map)
+        else:
+            return self._map
+
+    def get_persons(self, dict_return: bool = True) -> Union[Persons, Dict]:
         """
-        return Agents(self.agent_file)
+        Get the Persons object.
+        Persons is a protobuf message defined in `pycityproto.city.person.v2.person_pb2` in the `pycityproto` package.
+        The documentation url is https://docs.fiblab.net/cityproto#city.person.v2.Persons
+
+        Args:
+        - dict_return: Whether to return the object as a dictionary
+
+        Returns:
+        - The Persons object or the dictionary
+        """
+        if dict_return:
+            return pb2dict(self._persons)
+        else:
+            return self._persons
 
     def get_current_time(self) -> float:
         """
@@ -299,146 +265,217 @@ class Engine:
         """
         return self._e.get_current_time()
 
-    def get_running_vehicle_count(self) -> int:
+    def fetch_persons(self) -> Dict[str, NDArray]:
         """
-        Get the total number of running vehicles
+        Fetch the persons' information.
+
+        The result values is a dictionary with the following keys:
+        - id: The id of the person
+        - status: The status of the person
+        - lane_id: The id of the lane the person is on
+        - lane_parent_id: The id of the road the lane belongs to
+        - s: The s value of the person
+        - aoi_id: The id of the AOI the person is in
+        - v: The velocity of the person
+        - shadow_lane_id: The id of the shadow lane the person is on
+        - shadow_s: The s value of the shadow lane
+        - lc_yaw: The yaw of the lane change
+        - lc_completed_ratio: The completed ratio of the lane change
+        - is_forward: Whether the person is moving forward
+        - x: The x coordinate of the person
+        - y: The y coordinate of the person
+        - dir: The direction of the person
+        - schedule_index: The index of the schedule
+        - trip_index: The index of the trip
+        - departure_time: The departure time of the person
+        - traveling_time: The traveling time of the person
+        - total_distance: The total distance of the person
+
+        We strongly recommend using `pd.DataFrame(e.fetch_persons())` to convert the result to a DataFrame for better visualization and analysis.
         """
-        return self._e.get_running_vehicle_count()
+        if self._fetched_persons is None:
+            (
+                ids,
+                statuses,
+                lane_ids,
+                lane_parent_ids,
+                ss,
+                aoi_ids,
+                vs,
+                shadow_lane_ids,
+                shadow_ss,
+                lc_yaws,
+                lc_completed_ratios,
+                is_forwards,
+                xs,
+                ys,
+                dirs,
+                schedule_indexs,
+                trip_indexs,
+                departure_times,
+                traveling_times,
+                total_distances,
+            ) = self._e.fetch_persons()
+            self._fetched_persons = {
+                "id": ids,
+                "status": statuses,
+                "lane_id": lane_ids,
+                "lane_parent_id": lane_parent_ids,
+                "s": ss,
+                "aoi_id": aoi_ids,
+                "v": vs,
+                "shadow_lane_id": shadow_lane_ids,
+                "shadow_s": shadow_ss,
+                "lc_yaw": lc_yaws,
+                "lc_completed_ratio": lc_completed_ratios,
+                "is_forward": is_forwards,
+                "x": xs,
+                "y": ys,
+                "dir": dirs,
+                "schedule_index": schedule_indexs,
+                "trip_index": trip_indexs,
+                "departure_time": departure_times,
+                "traveling_time": traveling_times,
+                "total_distance": total_distances,
+            }
+        return self._fetched_persons
+
+    def fetch_lanes(self) -> Dict[str, NDArray]:
+        """
+        Fetch the lanes' information.
+
+        The result values is a dictionary with the following keys:
+        - id: The id of the lane
+        - status: The status of the lane
+        - v_avg: The average speed of the lane
+
+        We strongly recommend using `pd.DataFrame(e.fetch_lanes())` to convert the result to a DataFrame for better visualization and analysis.
+        """
+        if self._fetched_lanes is None:
+            ids, statuses, v_avgs = self._e.fetch_lanes()
+            self._fetched_lanes = {
+                "id": ids,
+                "status": statuses,
+                "v_avg": v_avgs,
+            }
+        return self._fetched_lanes
+
+    def get_running_person_count(self) -> int:
+        """
+        Get the total number of running persons (including driving and walking)
+        """
+        persons = self.fetch_persons()
+        status: NDArray[np.uint8] = persons["status"]
+        return (
+            status == PersonStatus.DRIVING.value | status == PersonStatus.WALKING.value
+        ).sum()
 
     def get_lane_statuses(self) -> NDArray[np.int8]:
         """
-        Get the traffic light status of each lane, `0`-green / `1`-yellow / `2`-red / `3`-restriction
+        Get the traffic light status of each lane, `0`-green / `1`-yellow / `2`-red / `3`-restriction.
+        The lane id of the entry `i` can be obtained by `e.lane_index2id[i]`.
         """
-        return self._e.get_lane_statuses()
-
-    def get_lane_geoms(self) -> List[NDArray[np.float32]]:
-        """
-        Get the geometry of each lane, `[[x1,y1], ..., [xn,yn]]`
-        """
-        return [
-            np.array(i, np.float32).reshape(-1, 2) for i in self._e.get_lane_geoms()
-        ]
-
-    def get_lane_lengths(self) -> NDArray[np.int8]:
-        """
-        Get the length of each lane
-        """
-        return self._e.get_lane_lengths()
-
-    def get_lane_vehicles(self) -> Union[Dict[str, List[str]], List[List[int]]]:
-        """
-        Get the list of vehicles of each lane
-        """
-        if self.has_id:
-            s = len(self.id2lane)
-            ls = [[] for _ in range(s)]
-            ret = {i: j for i, j in zip(self.id2lane, ls)}
-            veh_lane = self._e.get_vehicle_lanes()
-            mask = np.flatnonzero((veh_lane >= 0) & (veh_lane < s))
-            for i, lane in zip(mask, veh_lane[mask]):
-                ls[lane].append(self.id2agent[i])
-            return ret
-        ls = [[] for _ in range(self.lane_cnt)]
-        veh_lane = self._e.get_vehicle_lanes()
-        mask = np.flatnonzero((veh_lane >= 0) & (veh_lane < self.lane_cnt))
-        for i, lane in zip(mask, veh_lane[mask]):
-            ls[lane].append(i)
-        return ls
-
-    def get_lane_vehicle_counts(self) -> NDArray[np.int32]:
-        """
-        Get the number of vehicles of each lane
-        """
-        return self._e.get_lane_vehicle_counts()
+        lanes = self.fetch_lanes()
+        return lanes["status"]
 
     def get_lane_waiting_vehicle_counts(
         self, speed_threshold: float = 0.1
-    ) -> Union[Dict[str, int], List[int]]:
+    ) -> Dict[int, int]:
         """
         Get the number of vehicles of each lane with speed lower than `speed_threshold`
+
+        Returns:
+        - Dict: lane id -> number of vehicles
         """
-        if self.has_id:
-            return {
-                i: j
-                for i, j in zip(
-                    self.id2lane,
-                    self._e.get_lane_waiting_vehicle_counts(speed_threshold),
-                )
-            }
-        return self._e.get_lane_waiting_vehicle_counts(speed_threshold)
+
+        persons = self.fetch_persons()
+        lane_id = persons["lane_id"]
+        status = persons["status"]
+        v = persons["v"]
+        filter = (status == PersonStatus.DRIVING.value) & (v < speed_threshold)
+        filtered_lane_id = lane_id[filter]
+        # count for the lane id
+        unique, counts = np.unique(filtered_lane_id, return_counts=True)
+
+        return dict(zip(unique, counts))
 
     def get_lane_waiting_at_end_vehicle_counts(
         self, speed_threshold: float = 0.1, distance_to_end: float = 100
-    ) -> Union[Dict[str, int], List[int]]:
+    ) -> Dict[int, int]:
         """
         Get the number of vehicles of each lane with speed lower than `speed_threshold` and distance to end lower than `distance_to_end`
+
+        Returns:
+        - Dict: lane id -> number of vehicles
         """
-        if self.has_id:
-            return {
-                i: j
-                for i, j in zip(
-                    self.id2lane,
-                    self._e.get_lane_waiting_at_end_vehicle_counts(
-                        speed_threshold, distance_to_end
-                    ),
-                )
-            }
-        return self._e.get_lane_waiting_at_end_vehicle_counts(
-            speed_threshold, distance_to_end
-        )
+
+        persons = self.fetch_persons()
+        lane_id = persons["lane_id"]
+        status = persons["status"]
+        v = persons["v"]
+        s = persons["s"]
+        filter = (status == PersonStatus.DRIVING.value) & (v < speed_threshold)
+        filtered_lane_id = lane_id[filter]
+        filtered_s = s[filter]
+        # find the distance to the end of the lane
+        lane_ids_for_count = []
+        for i, s in zip(filtered_lane_id, filtered_s):
+            if self.id2lanes[i].length - s < distance_to_end:
+                lane_ids_for_count.append(i)
+        # count for the lane id
+        unique, counts = np.unique(lane_ids_for_count, return_counts=True)
+        return dict(zip(unique, counts))
 
     def get_lane_ids(self) -> NDArray[np.int32]:
         """
-        Get the ids of the lanes
+        Get the ids of the lanes as a numpy array
         """
-        return self._e.get_lane_ids()
+        return self.lane_index2id
 
-    def get_lane_average_vehicle_speed(self, lane_index) -> float:
+    def get_lane_average_vehicle_speed(self, lane_index: int) -> float:
+        """
+        Get the average speed of the vehicles on the lane `lane_index`
+        """
         if self.speed_stat_interval == 0:
             raise RuntimeError(
                 "Please set speed_stat_interval to enable speed statistics"
             )
-        return self._e.get_lane_average_vehicle_speed(lane_index)
+        lanes = self.fetch_lanes()
+        v_args: NDArray[np.float32] = lanes["v_avg"]
+        return v_args[lane_index].item()
 
     def get_junction_ids(self) -> NDArray[np.int32]:
         """
         Get the ids of the junctions
         """
-        return self._e.get_junction_ids()
-
-    def get_junction_lanes(self) -> List[List[int]]:
-        """
-        Get the `index` of the lanes inside each junction
-        """
-        return self._e.get_junction_lanes()
-
-    def get_junction_inout_lanes(self) -> Tuple[List[List[int]], List[List[int]]]:
-        """
-        Get the `index` of the `in` and `out` lanes of each junction
-        """
-        return self._e.get_junction_inout_lanes()
+        return self.junc_index2id
 
     def get_junction_phase_lanes(self) -> List[List[Tuple[List[int], List[int]]]]:
         """
         Get the `index` of the `in` and `out` lanes of each phase of each junction
+
+        Examples: TODO
         """
         return self._e.get_junction_phase_lanes()
 
     def get_junction_phase_ids(self) -> NDArray[np.int32]:
         """
-        Get the phase id of each junction, `-1` if it has no traffic lights
+        Get the phase id of each junction, `-1` if it has no traffic lights.
+        The junction id of the entry `i` can be obtained by `e.junc_index2id[i]`.
         """
         return self._e.get_junction_phase_ids()
 
     def get_junction_phase_counts(self) -> NDArray[np.int32]:
         """
-        Get the number of available phases of each junction
+        Get the number of available phases of each junction.
+        The junction id of the entry `i` can be obtained by `e.junc_index2id[i]`.
         """
         return self._e.get_junction_phase_counts()
 
     def get_junction_dynamic_roads(self) -> List[List[int]]:
         """
-        Get the ids of the dynamic roads connected to each junction
+        Get the ids of the dynamic roads connected to each junction.
+        The junction id of the entry `i` can be obtained by `e.junc_index2id
         """
         return self._e.get_junction_dynamic_roads()
 
@@ -456,116 +493,55 @@ class Engine:
             [slice(a, b) for a, b in i] for i in self._e.get_road_lane_plans(road_index)
         ]
 
-    def get_road_average_vehicle_speed(self, road_index) -> float:
+    def get_road_average_vehicle_speed(self, road_index: int) -> float:
+        """
+        Get the average speed of the vehicles on the road `road_index`
+        """
         if self.speed_stat_interval == 0:
             raise RuntimeError(
                 "Please set speed_stat_interval to enable speed statistics"
             )
-        return self._e.get_road_average_vehicle_speed(road_index)
+        lanes = self.fetch_lanes()
+        road_id = self.road_index2id[road_index]
+        lane_ids = self.id2roads[road_id].lane_ids
+        lane_indexes = [self.lane_id2index[i] for i in lane_ids]
+        v_args: NDArray[np.float32] = lanes["v_avg"]
+        return v_args[lane_indexes].mean().item()
 
-    def get_vehicle_lanes(self) -> Union[Dict[str, int], NDArray[np.int32]]:
+    def get_finished_person_count(self) -> int:
         """
-        Get the lane index of each vehicle, `-1` for not running on the road
+        Get the number of the finished persons
         """
-        if self.has_id:
-            x = self._e.get_vehicle_lanes()
-            mask = np.flatnonzero(x >= 0)
-            return {self.id2agent[i]: j for i, j in zip(mask, x[mask])}
-        return self._e.get_vehicle_lanes()
+        persons = self.fetch_persons()
+        status: NDArray[np.uint8] = persons["status"]
+        return (status == PersonStatus.FINISHED.value).sum()
 
-    def get_vehicle_speeds(self) -> Union[Dict[str, float], NDArray[np.float32]]:
+    def get_finished_person_average_traveling_time(self) -> float:
         """
-        Get the speed of each vehicle, `-1` for not running on the road
+        Get the average traveling time of the finished persons
         """
-        if self.has_id:
-            x = self._e.get_vehicle_speeds()
-            mask = np.flatnonzero(x >= 0)
-            return {self.id2agent[i]: j for i, j in zip(mask, x[mask])}
-        return self._e.get_vehicle_speeds()
+        persons = self.fetch_persons()
+        status: NDArray[np.uint8] = persons["status"]
+        traveling_time = persons["traveling_time"]
+        return traveling_time[status == PersonStatus.FINISHED.value].mean()
 
-    def get_vehicle_statuses(self) -> NDArray[np.int8]:
+    def get_running_person_average_traveling_time(self) -> float:
         """
-        Get the status of each vehicle, `1`-driving / `2`-finished / `0`-otherwise
+        Get the average traveling time of the running persons
         """
-        return self._e.get_vehicle_statuses()
+        persons = self.fetch_persons()
+        status: NDArray[np.uint8] = persons["status"]
+        traveling_time = persons["traveling_time"]
+        return traveling_time[status == PersonStatus.DRIVING.value].mean()
 
-    def get_vehicle_raw_statuses(self) -> NDArray[np.int8]:
+    def get_departed_person_average_traveling_time(self) -> float:
         """
-        Get the raw status of each vehicle, only for debugging.
+        Get the average traveling time of the departed persons (running+finished)
         """
-        return self._e.get_vehicle_raw_statuses()
-
-    def get_vehicle_traveling_or_departure_times(self) -> NDArray[np.float32]:
-        """
-        - For `finished` vehicles, it is the traveling time.
-        - For `driving` vehicles, it is the negative departure time.
-        """
-        return self._e.get_vehicle_traveling_or_departure_times()
-
-    def get_finished_vehicle_count(self) -> int:
-        """
-        Get the number of the finished vehicles
-        """
-        return self._e.get_finished_vehicle_count()
-
-    def get_finished_vehicle_average_traveling_time(self) -> float:
-        """
-        Get the average traveling time of the finished vehicles
-        """
-        return self._e.get_finished_vehicle_average_traveling_time()
-
-    def get_running_vehicle_average_traveling_time(self) -> float:
-        """
-        Get the average traveling time of the running vehicles
-        """
-        return self._e.get_running_vehicle_average_traveling_time()
-
-    def get_departed_vehicle_average_traveling_time(self) -> float:
-        """
-        Get the average traveling time of the departed vehicles (running+finished)
-        """
-        return self._e.get_departed_vehicle_average_traveling_time()
-
-    def get_vehicle_distances(self) -> Union[Dict[str, float], NDArray[np.float32]]:
-        """
-        Get the traveled distance of each vehicle on the current lane
-        """
-        if self.has_id:
-            x = self._e.get_vehicle_distances()
-            mask = np.flatnonzero(x >= 0)
-            return {self.id2agent[i]: j for i, j in zip(mask, x[mask])}
-        return self._e.get_vehicle_distances()
-
-    def get_vehicle_total_distances(
-        self,
-    ) -> Union[Dict[str, float], NDArray[np.float32]]:
-        """
-        Get the total traveled distance of each vehicle
-        """
-        if self.has_id:
-            return {
-                i: j
-                for i, j in zip(self.id2agent, self._e.get_vehicle_total_distances())
-            }
-        return self._e.get_vehicle_total_distances()
-
-    def get_vehicle_positions(self) -> NDArray[np.float64]:
-        """
-        Get the (x,y,dir) of each running vehicle
-        """
-        return self._e.get_vehicle_positions().reshape(-1, 3)
-
-    def get_vehicle_positions_all(self) -> NDArray[np.float64]:
-        """
-        Get the (x,y,dir) of all vehicles
-        """
-        return self._e.get_vehicle_positions_all().reshape(-1, 3)
-
-    def get_vehicle_id_positions(self) -> NDArray[np.float64]:
-        """
-        Get the (id,x,y,dir) of each vehicle
-        """
-        return self._e.get_vehicle_id_positions().reshape(-1, 4)
+        persons = self.fetch_persons()
+        status: NDArray[np.uint8] = persons["status"]
+        traveling_time = persons["traveling_time"]
+        return traveling_time[status != PersonStatus.SLEEP.value].mean()
 
     def get_road_lane_plan_index(self, road_index: int) -> int:
         """
@@ -573,44 +549,45 @@ class Engine:
         """
         return self._e.get_road_lane_plan_index(road_index)
 
-    def get_road_vehicle_counts(self) -> NDArray[np.int32]:
+    def get_road_vehicle_counts(self) -> Dict[int, int]:
         """
         Get the number of vehicles of each road
+
+        Returns:
+        - Dict: road id -> number of vehicles
         """
-        return self._e.get_road_vehicle_counts()
+        persons = self.fetch_persons()
+        road_id = persons["lane_parent_id"]
+        status = persons["status"]
+        filter = status == PersonStatus.DRIVING.value
+        filtered_road_id = road_id[filter]
+        # count for the road id
+        unique, counts = np.unique(filtered_road_id, return_counts=True)
+        return dict(zip(unique, counts))
 
     def get_road_waiting_vehicle_counts(
         self, speed_threshold: float = 0.1
-    ) -> Union[Dict[str, int], List[int]]:
+    ) -> Dict[int, int]:
         """
         Get the number of vehicles with speed lower than `speed_threshold` of each road
-        """
-        if self.has_id:
-            return {
-                i: j
-                for i, j in zip(
-                    self.id2road,
-                    self._e.get_road_waiting_vehicle_counts(speed_threshold),
-                )
-            }
-        return self._e.get_road_waiting_vehicle_counts(speed_threshold)
 
-    def set_vehicle_enable(self, vehicle_index: int, enable: bool):
+        Returns:
+        - Dict: road id -> number of vehicles
         """
-        Enable or disable vehicle `vehicle_index`
-        """
-        self._e.set_vehicle_enable(vehicle_index, enable)
 
-    def set_vehicle_enable_batch(
-        self, vehicle_indices: List[int], enable: Union[bool, List[bool]]
-    ):
-        """
-        Enable or disable vehicles in `vehicle_indices`
-        """
-        self._e.set_vehicle_enable_batch(
-            vehicle_indices,
-            [enable] * len(vehicle_indices) if isinstance(enable, bool) else enable,
+        persons = self.fetch_persons()
+        road_id = persons["lane_parent_id"]
+        status = persons["status"]
+        v = persons["v"]
+        filter = (
+            (status == PersonStatus.DRIVING.value)
+            & (v < speed_threshold)
+            & (road_id < 3_0000_0000)  # the road id ranges [2_0000_0000, 3_0000_0000)
         )
+        filtered_road_id = road_id[filter]
+        # count for the road id
+        unique, counts = np.unique(filtered_road_id, return_counts=True)
+        return dict(zip(unique, counts))
 
     def set_tl_policy(self, junction_index: int, policy: TlPolicy):
         """
@@ -648,8 +625,6 @@ class Engine:
         """
         Set the phase of `junction_index` to `phase_index`
         """
-        if self.has_id:
-            junction_index = self.junc2id[junction_index]
         self._e.set_tl_phase(junction_index, phase_index)
 
     def set_tl_phase_batch(self, junction_indices: List[int], phase_indices: List[int]):
@@ -657,8 +632,6 @@ class Engine:
         Set the phase of `junction_index` to `phase_index` in batch
         """
         assert len(junction_indices) == len(phase_indices)
-        if self.has_id:
-            raise NotImplementedError
         self._e.set_tl_phase_batch(junction_indices, phase_indices)
 
     def set_road_lane_plan(self, road_index: int, plan_index: int):
@@ -707,56 +680,10 @@ class Engine:
             max_speeds = [max_speeds] * len(lane_indices)
         self._e.set_lane_max_speed_batch(lane_indices, max_speeds)
 
-    def set_vehicle_route(
-        self,
-        vehicle_index: int,
-        route: List[int],
-        end_lane_id: int = -1,
-        end_s: float = -10,
-    ):
-        """
-        Set the route of vehicle `vehicle_index` to `route` and the end to (`end_lane_id`,`end_s`)
-
-        - If `end_lane_id` is `-1`, then the vehicle will stop at the rightmost drivable lane of the last road
-
-        - `end_s` will be clipped to be within the length of end lane
-
-        - If `end_s<0`, it will be treated as measured from the end of the lane
-        """
-        self._e.set_vehicle_route(vehicle_index, route, end_lane_id, end_s)
-
-    def debug_vehicle_info(self) -> NDArray[np.float64]:
-        """
-        Get debug info
-        """
-        return self._e.debug_vehicle_info().reshape(-1, 5)
-
-    def debug_vehicle_full_info(self, vehicle_id: int) -> Tuple:
-        """
-        Get full debug info for vehicle `vehicle_id`
-        """
-        return self._e.debug_vehicle_full(vehicle_id)
-
-    def debug_lane_info(self):
-        """
-        Get debug info
-        """
-        return self._e.debug_lane_info()
-
     def next_step(self, n=1):
         """
         Move forward `n` steps
         """
+        self._fetched_persons = None
+        self._fetched_lanes = None
         self._e.next_step(n)
-
-    def make_checkpoint(self) -> int:
-        """
-        Make a checkpoint of the current state of the simulator and return the checkpoint id
-        """
-        return self._e.make_checkpoint()
-
-    def restore_checkpoint(self, checkpoint_id):
-        """
-        Restore the state of the simulator to a previous checkpoint
-        """
-        self._e.restore_checkpoint(checkpoint_id)
