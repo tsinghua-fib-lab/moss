@@ -284,7 +284,7 @@ class DBRecorder:
 
                 cur.copy_from(
                     StringIteratorIO(
-                        f"{step},{p},{l},{round(d,3)},{x},{y},'',0,0,{round(v,3)}\n"
+                        f"{step},{p},{l},{round(d,3)},{x},{y},,0,0,{round(v,3)}\n"
                         for step, vs, x, y in tqdm(vehs, ncols=90, disable=not use_tqdm)
                         for (p, l, d, v), x, y in zip(vs, x, y)
                     ),
