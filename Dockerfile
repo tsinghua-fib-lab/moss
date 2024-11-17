@@ -8,7 +8,7 @@ RUN yarn global add serve
 
 # Copy build files
 RUN mkdir -p /home/node/app/build/docs
-COPY --from=builder /build/docs ./build
+COPY ./docs ./build
 
 EXPOSE 80
 
