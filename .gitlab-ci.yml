@@ -12,10 +12,12 @@ build-docker-image:
   tags:
     - dind
   stage: build
-  rules:
-    - if: $CI_COMMIT_TAG =~ $VERSION_REGEX
+  only:
+    - main
   script:
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
-    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG} -t ${CI_REGISTRY_IMAGE}:latest .
-    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+    # tag格式: <sha1>-<time>
+    - export TIME=$(date +%s)
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}-${TIME} -t ${CI_REGISTRY_IMAGE}:latest .
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}-${TIME}
     - docker push ${CI_REGISTRY_IMAGE}:latest
