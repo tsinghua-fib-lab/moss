@@ -47,7 +47,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   cityproto
   GIT_REPOSITORY https://github.com/tsinghua-fib-lab/cityproto
-  GIT_TAG v2.0.0-alpha.8
+  GIT_TAG v2.0.4
 )
 
 set(FETCHCONTENT_QUIET OFF)

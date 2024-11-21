@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-moss"
-version = "1.0.0a1"
+version = "1.0.0a2"
 description = "MObility Simulation System"
 authors = [
   { name = "Jun Zhang", email = "zhangjun990222@gmail.com" },
@@ -20,11 +20,8 @@ requires-python = ">=3.8"
 dependencies = [
   "shapely>=2",
   "protobuf>=3.20,<5",
-  "grpcio",
-  "grpcio-tools",
   "numpy>=1.20,<2",
-  "pycityproto>=1.25.1,<2",
-  "igraph",
+  "pycityproto>=2,<3",
   "tqdm",
   "psycopg2-binary>=2.5,<3",
   "pymongo",
