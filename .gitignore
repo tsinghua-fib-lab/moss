@@ -1,5 +1,6 @@
 # Custom
 _*
+*.log
 log/
 data/
 *.egg-info

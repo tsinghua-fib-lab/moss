@@ -55,14 +55,36 @@ __device__ void PersonState::UpdatePositionDir() {
   }
 }
 
-__host__ __device__ void PersonNode::PrintDebugString() const {
-  printf(
-      "PersonNode: is_shadow=%d, overwritable=%d, id=%d, index=%d, "
-      "person.lane.id=%d, s=%.4f, person.shadow_lane.id=%d, shadow_s=%.4f\n",
-      is_shadow, overwritable, index, self->id, self->runtime.lane->id,
-      self->runtime.s,
-      self->runtime.shadow_lane ? int(self->runtime.shadow_lane->id) : -1,
-      self->runtime.shadow_s);
+__host__ __device__ void PersonNode::PrintDebugString(bool show_link) const {
+  if (show_link) {
+    printf("[");
+    if (prev) {
+      prev->PrintDebugString(false);
+    }
+    printf(
+        "]<--"
+        "PersonNode: is_shadow=%d, id=%u, index=%u, "
+        "person.lane.id=%u, s=%.4f, person.shadow_lane.id=%d, shadow_s=%.4f"
+        " -->[",
+        is_shadow, self->id, index, self->runtime.lane->id, self->runtime.s,
+        self->runtime.shadow_lane ? int(self->runtime.shadow_lane->id) : -1,
+        self->runtime.shadow_s);
+    if (next) {
+      next->PrintDebugString(false);
+    }
+    printf("]\n");
+  } else {
+    printf(
+        "[%d]"
+        "<"
+        "PersonNode: is_shadow=%d, id=%u, index=%u, "
+        "person.lane.id=%u, s=%.4f, person.shadow_lane.id=%d, shadow_s=%.4f"
+        " >[%d]",
+        prev ? int(prev->index) : -1, is_shadow, self->id, index,
+        self->runtime.lane->id, self->runtime.s,
+        self->runtime.shadow_lane ? int(self->runtime.shadow_lane->id) : -1,
+        self->runtime.shadow_s, next ? int(next->index) : -1);
+  }
 }
 
 __host__ __device__ Trip& Person::GetTrip() {
@@ -70,32 +92,39 @@ __host__ __device__ Trip& Person::GetTrip() {
 }
 
 __host__ __device__ bool Person::NextTrip(float t) {
-  if (schedules.size == 0) {
+  if (schedule_index >= schedules.size) {
     departure_time = 1e999;
     route = nullptr;
     return false;
   }
-  departure_time = t;
   auto& s = schedules[schedule_index];
-  ++trip_index;
-  if (trip_index == s.trips.size) {
-    trip_index = 0;
-    ++schedule_index;
-    if (schedule_index == schedules.size) {
-      schedules.size = 0;
-      schedule_index = 0;
-      departure_time = 1e999;
-      route = nullptr;
-      return false;
-    } else {
-      // go to the next schedule
-      s = schedules[schedule_index];
-      if (s.departure >= 0) {
-        departure_time = s.departure;
-      } else if (s.wait >= 0) {
-        departure_time += s.wait;
-      }
+  bool has_next = false;
+  do {
+    // loop the schedule's trips to find the next trip
+    ++trip_index;
+    if (trip_index < s.trips.size) {
+      has_next = true;
+      break;
     }
+    // finish the schedule
+    trip_index = uint(-1);
+    // find the next schedule
+    ++schedule_index;
+    if (schedule_index >= schedules.size) {
+      break;
+    }
+    // go to the next schedule
+    s = schedules[schedule_index];
+    if (s.departure >= 0) {
+      departure_time = s.departure;
+    } else if (s.wait >= 0) {
+      departure_time += t + s.wait;
+    }
+  } while (schedule_index < schedules.size);
+  if (!has_next) {
+    departure_time = 1e999;
+    route = nullptr;
+    return false;
   }
   // finish schedule_index and trip_index update
   // set departure time
@@ -103,13 +132,15 @@ __host__ __device__ bool Person::NextTrip(float t) {
   if (trip->departure >= 0) {
     departure_time = trip->departure;
   } else if (trip->wait >= 0) {
-    departure_time += trip->wait;
+    departure_time = t + trip->wait;
   }
   route = &trip->route;
   route_index = uint(-1);
   route_in_junction = false;
   traveling_time = 0;
   total_distance = 0;
+  assert(trip->mode == TripMode::TRIP_MODE_WALK_ONLY ||
+         trip->mode == TripMode::TRIP_MODE_DRIVE_ONLY);
   return true;
 }
 
@@ -155,7 +186,7 @@ __global__ void Prepare(Person* persons, PersonOutput* outputs, uint size,
   o.status = int(p.runtime.status);
   // update position saved in node
   p.node.s = p.runtime.s;
-  if ((p.node.overwritable = p.runtime.shadow_lane != nullptr)) {
+  if (p.runtime.shadow_lane != nullptr) {
     p.shadow_node.s = p.runtime.shadow_s;
     p.shadow_node.sides[0][0] = p.shadow_node.sides[0][1] =
         p.shadow_node.sides[1][0] = p.shadow_node.sides[0][1] = nullptr;
@@ -208,15 +239,17 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
           case TripMode::TRIP_MODE_DRIVE_ONLY: {
             auto* start_lane = p.runtime.lane;
             auto start_s = p.runtime.s;
-            if (start_lane && start_lane->type != LaneType::LANE_TYPE_DRIVING) {
-              start_lane = start_lane->parent_road->right_driving_lane;
-              start_s = ProjectFromLane(p.runtime.lane, start_lane, start_s);
-            }
             if (p.runtime.aoi) {
               // get start lane and s by route's road
               auto* start_road = p.route->veh->route[0];
               start_lane = start_road->right_driving_lane;
               start_s = p.runtime.aoi->GetDrivingS(start_lane);
+            } else if (start_lane &&
+                       start_lane->type != LaneType::LANE_TYPE_DRIVING) {
+              start_lane = start_lane->parent_road->right_driving_lane;
+              assert(p.runtime.lane);
+              assert(start_lane);
+              start_s = ProjectFromLane(p.runtime.lane, start_lane, start_s);
             }
             assert(start_lane);
             assert(start_s >= 0);
@@ -229,14 +262,22 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
           case TripMode::TRIP_MODE_WALK_ONLY: {
             auto* start_lane = p.runtime.lane;
             auto start_s = p.runtime.s;
-            if (start_lane && start_lane->type != LaneType::LANE_TYPE_WALKING) {
-              start_lane = start_lane->parent_road->walking_lane;
-              start_s = ProjectFromLane(p.runtime.lane, start_lane, start_s);
-            }
             if (p.runtime.aoi) {
               // get s by route's lane
               start_lane = p.route->ped->route[0].lane;
               start_s = p.runtime.aoi->GetWalkingS(start_lane);
+            } else if (start_lane &&
+                       start_lane->type != LaneType::LANE_TYPE_WALKING) {
+              auto* start_road = start_lane->parent_road;
+              start_lane = start_road->walking_lane;
+              if (!start_lane) {
+                printf(RED("Error: person %d, schedule %d trip %d has no "
+                           "walking lane in road %d\n"),
+                       p.id, p.schedule_index, p.trip_index, start_road->id);
+              }
+              assert(p.runtime.lane);
+              assert(start_lane);
+              start_s = ProjectFromLane(p.runtime.lane, start_lane, start_s);
             }
             assert(start_lane);
             assert(start_s >= 0);
@@ -247,7 +288,9 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
             p.runtime.lane->ped_add_buffer.Add(&p.node.add_node);
           } break;
           default: {
-            printf(RED("Error: unknown trip mode: %d\n"), next_trip.mode);
+            printf(RED("Error: person %d, schedule %d trip %d unknown trip "
+                       "mode: %d\n"),
+                   p.id, p.schedule_index, p.trip_index, next_trip.mode);
             assert(false);
           }
         }
@@ -261,16 +304,46 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
 }
 
 void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
+  // step 0: for-loop all persons and find persons with supported schedules
+  std::vector<city::person::v2::Person> pb_valid_persons;
+  for (auto& p : pb.persons()) {
+    auto& schedules = p.schedules();
+    for (auto& s : schedules) {
+      if (s.loop_count() != 1) {
+        Warn(
+            "Error: moss does not support loop_count != 1, because all route "
+            "should be pre-computed. But it can not put current pre-computed "
+            "route for loop_count != 1 status. Person id: ",
+            p.id(), " will be ignored");
+        goto BAD_PERSON;
+      }
+      for (auto& t : s.trips()) {
+        switch (t.mode()) {
+          case TripMode::TRIP_MODE_DRIVE_ONLY:
+          case TripMode::TRIP_MODE_WALK_ONLY:
+            break;
+          default: {
+            Warn("Error: unsupported trip mode: ", t.mode(), " for person ",
+                 p.id(), ". The person will be ignored");
+            goto BAD_PERSON;
+          }
+        }
+      }
+    }
+    pb_valid_persons.push_back(p);
+  BAD_PERSON:;
+  }
+
   M = S->mem->MValueZero<MData>();
   this->S = S;
   stream = NewStream();
-  assert(person_limit <= pb.persons_size());
+  person_limit = min(person_limit, uint(pb_valid_persons.size()));
   persons.New(S->mem, person_limit);
   SetGridBlockSize(Prepare, persons.size, S->sm_count, g_prepare, b_prepare);
   SetGridBlockSize(Update, persons.size, S->sm_count, g_update, b_update);
   uint index = 0;
   float earliest_departure = 1e999;
-  for (auto& pb : pb.persons()) {
+  for (auto& pb : pb_valid_persons) {
     if (index == person_limit) break;
     auto& p = persons[index++];
     if (S->verbose && index % 1000 == 0) {
@@ -367,22 +440,18 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
 
     // init schedule
     {
-#if PERF
-      p.schedules.New(S->mem, 1);
-#else
       p.schedules.New(S->mem, pb.schedules_size());
-#endif
       // schedule index
       uint s_index = 0;
       for (auto& pb : pb.schedules()) {
+        auto& s = p.schedules[s_index++];
         if (pb.loop_count() != 1) {
           Fatal(
               "Error: moss does not support loop_count != 1, because all route "
               "should be pre-computed. But it can not put current pre-computed "
               "route for loop_count != 1 status. Person id: ",
-              p.id);
+              p.id, " will be ignored");
         }
-        auto& s = p.schedules[s_index++];
         if (pb.has_wait_time()) {
           s.wait = pb.wait_time();
         } else {
@@ -393,11 +462,7 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
         } else {
           s.departure = -1;
         }
-#if PERF
-        s.trips.New(S->mem, 1);
-#else
         s.trips.New(S->mem, pb.trips_size());
-#endif
         {
           // trip index
           uint t_index = 0;
@@ -477,25 +542,35 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
                   t.end_s = t.end_aoi->GetWalkingS(t.end_lane);
                 }
               } break;
-              default:
+              default: {
                 Fatal("Error: unknown trip mode: ", t.mode);
-                break;
+              } break;
             }
-#if PERF
-            break;
-#endif
           }
         }
-#if PERF
-        break;
-#endif
       }
     }
     // init person state
     p.trip_index = uint(-1);
-    p.NextTrip(S->time);
-    earliest_departure = min(earliest_departure, p.departure_time);
-    p.runtime.status = PersonStatus::SLEEP;
+    if (p.schedules.size > 0) {
+      p.schedule_index = 0;
+      auto& s = p.schedules[p.schedule_index];
+      if (s.departure >= 0) {
+        p.departure_time = s.departure;
+      } else if (s.wait >= 0) {
+        p.departure_time = S->time + s.wait;
+      } else {
+        Fatal("Error: person ", p.id, " has no departure time");
+      }
+      if (p.NextTrip(S->time)) {
+        earliest_departure = min(earliest_departure, p.departure_time);
+        p.runtime.status = PersonStatus::SLEEP;
+      } else {
+        p.runtime.status = PersonStatus::FINISHED;
+      }
+    } else {
+      p.runtime.status = PersonStatus::FINISHED;
+    }
   }
   if (index < pb.persons_size()) {
     Warn("Actual persons: ", pb.persons_size(), " -> ", index);

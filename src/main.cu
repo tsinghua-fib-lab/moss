@@ -128,6 +128,10 @@ int main(int argc, char** argv) {
     device_mem = cfg["device_mem"].as<float>();
   }
 
+  uint device = 0;
+  auto device_str = parser.get<std::string>("gpu");
+  device = std::stoi(device_str);
+
   s.Init(name, {
                    .map_file = map_file,
                    .person_file = person_file,
@@ -146,7 +150,7 @@ int main(int argc, char** argv) {
                    .n_workers = 0,
                    .junction_yellow_time = junction_yellow_time,
                    .phase_pressure_coeff = phase_pressure_coeff,
-                   .device = uint(parser.get<int>("gpu")),
+                   .device = device,
                    .device_mem = device_mem,
                });
   t_init = Time() - t_init;

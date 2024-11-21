@@ -226,14 +226,9 @@ __global__ void Prepare1(Lane* lanes, uint size) {
           if (!r || less(r, q)) {
             // 删除p更划算
             // r->p->q
-            if (p->overwritable && p->index < q->index) {
-              // 若可覆盖则不删除
-              p->s = q->s;
-            } else {
-              q->prev = r;
-              (r ? r->next : l.veh_head) = q;
-              l.veh_add_buffer.Add(&p->add_node);
-            }
+            q->prev = r;
+            (r ? r->next : l.veh_head) = q;
+            l.veh_add_buffer.Add(&p->add_node);
             p = q;
             q = p->next;
           } else {

@@ -104,6 +104,7 @@ __device__ void ListRemove(T* x, T*& head) {
   if (x->next) {
     x->next->prev = x->prev;
   }
+  x->prev = x->next = nullptr;
 }
 
 template <class T>
@@ -123,6 +124,20 @@ __device__ bool ListCheckLoop(T* p) {
     }
   }
   return false;
+}
+
+template <class T>
+__device__ bool ListCheckConnection(T* p) {
+  while (p && p->next) {
+    T* q = p->next;
+    if (p != q->prev || q != p->next) {
+      return false;
+    }
+    assert(p->next == q);
+    assert(q->prev == p);
+    p = q;
+  }
+  return true;
 }
 
 template <class T>

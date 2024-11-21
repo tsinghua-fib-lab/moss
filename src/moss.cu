@@ -104,9 +104,6 @@ void Moss::Init(const std::string& name, const Config& config_) {
     Info("Person: ", persons.persons_size());
   }
 
-  // update person limit as person size used in the simulation
-  config.person_limit = min(config.person_limit, persons.persons_size());
-
   // init simulation entities
   {
     mem->PreferCPU();

@@ -72,9 +72,9 @@ struct Lane {
   PersonNode *ped_head, *veh_head;
   // vehicle and pedestrian count
   uint ped_cnt, veh_cnt;
-  // add buffer for vehicle and pedestrian TODO: lock-free linked list
+  // add buffer for vehicle and pedestrian
   DList<PersonNode> ped_add_buffer, veh_add_buffer;
-  // remove buffer for vehicle and pedestrian TODO: lock-free linked list
+  // remove buffer for vehicle and pedestrian
   DList<PersonNode> ped_remove_buffer, veh_remove_buffer;
   // traffic light status (only junction lane)
   LightState light_state;

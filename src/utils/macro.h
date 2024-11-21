@@ -22,7 +22,7 @@ using uint = uint32_t;
 #define RED(x) "\033[1;31m" x "\033[0m"
 #define GREEN(x) "\033[32m" x "\033[0m"
 #define PI 3.1415926536
-#define PERF false
+#define PERF true
 #define STUCK_MONITOR false
 #define DETERMINISTIC false
 #ifdef NDEBUG

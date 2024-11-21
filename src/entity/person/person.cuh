@@ -158,8 +158,7 @@ struct Person;
 
 struct PersonNode {
   bool is_shadow : 1;
-  bool overwritable : 1;  // 变道时本体的s可以被前车覆写
-  uint index : 30;        // index in the array
+  uint index : 31;        // index in the array
   float s;
   Person* self;
   // add / remove buffer linked list node
@@ -174,7 +173,7 @@ struct PersonNode {
   // side vehicles: [left|right][front|back]
   PersonNode* sides[2][2];
 
-  __host__ __device__ void PrintDebugString() const;
+  __host__ __device__ void PrintDebugString(bool show_link=true) const;
 };
 
 #define LEFT (0)
