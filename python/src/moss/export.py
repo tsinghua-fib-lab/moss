@@ -9,10 +9,11 @@ from .engine import Engine
 
 __all__ = ["DBRecorder"]
 
+
 class StringIteratorIO(io.TextIOBase):
     def __init__(self, iter: Iterator[str]):
         self._iter = iter
-        self._buff = ''
+        self._buff = ""
 
     def readable(self) -> bool:
         return True
@@ -24,7 +25,7 @@ class StringIteratorIO(io.TextIOBase):
             except StopIteration:
                 break
         ret = self._buff[:n]
-        self._buff = self._buff[len(ret):]
+        self._buff = self._buff[len(ret) :]
         return ret
 
     def read(self, n: Optional[int] = None) -> str:
@@ -42,7 +43,7 @@ class StringIteratorIO(io.TextIOBase):
                     break
                 n -= len(m)
                 line.append(m)
-        return ''.join(line)
+        return "".join(line)
 
 
 class DBRecorder:
@@ -63,6 +64,7 @@ class DBRecorder:
         - max_lat: The maximum latitude of the simulation.
         - road_status_v_min: The minimum speed of the road status.
         - road_status_interval: The interval of the road status.
+        - version: The version of the simulation result schema (now is 2).
     - {output_name}_s_cars: The vehicles of the simulation.
         - step: The step of the simulation.
         - id: The id of the vehicle.
@@ -118,11 +120,13 @@ class DBRecorder:
         """
         Record the data of the engine.
         """
-        self.data.append([
-            self.eng._e.get_current_step(),
-            self.eng._e.get_output_vehicles(),
-            self.eng._e.get_output_tls(),
-        ])
+        self.data.append(
+            [
+                self.eng._e.get_current_step(),
+                self.eng._e.get_output_vehicles(),
+                self.eng._e.get_output_tls(),
+            ]
+        )
 
     def save(self, db_url: str, mongo_map: str, output_name: str, use_tqdm=False):
         """
@@ -154,12 +158,13 @@ class DBRecorder:
             min_lon, max_lon, min_lat, max_lat = min(xs), max(xs), min(ys), max(ys)
         else:
             x1, y1, x2, y2 = self.eng._map_bbox
-            min_lon,  min_lat = proj(x1, y1, True)
-            max_lon,  max_lat = proj(x2, y2, True)
+            min_lon, min_lat = proj(x1, y1, True)
+            max_lon, max_lat = proj(x2, y2, True)
         with psycopg2.connect(db_url) as conn:
             with conn.cursor() as cur:
                 # create table meta_simple
-                cur.execute("""
+                cur.execute(
+                    """
                 CREATE TABLE IF NOT EXISTS public.meta_simple (
                     "name" text NOT NULL,
                     "start" int4 NOT NULL,
@@ -173,20 +178,25 @@ class DBRecorder:
                     max_lat float8 NOT NULL,
                     road_status_v_min float8 NULL,
                     road_status_interval int4 NULL,
+                    version INT NOT NULL,
                     CONSTRAINT meta_simple_pkey PRIMARY KEY (name)
                 );
-                """)
+                """
+                )
                 conn.commit()
 
                 # 删除指定记录
                 # delete from public.meta_simple where name='output_name';
-                cur.execute(f"DELETE FROM public.meta_simple WHERE name='{output_name}';")
+                cur.execute(
+                    f"DELETE FROM public.meta_simple WHERE name='{output_name}';"
+                )
                 conn.commit()
 
                 # 插入新记录
-                # insert into public.meta_simple values ('output_name', 0, 1000, 1, 1, 'map', 0, 0, 1, 1, 0, 300);
+                # insert into public.meta_simple values ('output_name', 0, 1000, 1, 1, 'map', 0, 0, 1, 1, 0, 300, 2);
                 cur.execute(
-                    f"INSERT INTO public.meta_simple VALUES ('{output_name}', {self.eng.start_step}, {len(self.data)}, 1, 1, '{mongo_map}', {min_lon}, {min_lat}, {max_lon}, {max_lat}, 0, 300);")
+                    f"INSERT INTO public.meta_simple VALUES ('{output_name}', {self.eng.start_step}, {len(self.data)}, 1, 1, '{mongo_map}', {min_lon}, {min_lat}, {max_lon}, {max_lat}, 0, 300, 2);"
+                )
                 conn.commit()
 
                 # 删除表格
