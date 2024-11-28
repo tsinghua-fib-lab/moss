@@ -54,6 +54,7 @@ void Data::Init(Moss* S, const PbMap& map) {
     }
   }
   // next_road_lane
+  bool bad_nrl = false;
   index = 0;
   for (auto& pb : map.roads()) {
     auto& r = roads[index++];
@@ -103,14 +104,27 @@ void Data::Init(Moss* S, const PbMap& map) {
           b = max(b, offset);
         }
         if ((b - a) != ls.size() - 1) {
-          throw std::range_error(
-              "Only continuous next road plans are supported.");
+          Warn("Only continuous next road plans are supported. Road ", r.id,
+               "'s successor lanes do not appear to be in continuous order, "
+               "please check the data for correctness.");
+          bad_nrl = true;
         }
         x.next_road_id = rid;
         x.offset1 = a;
         x.offset2 = b;
       }
     }
+  }
+  if (bad_nrl) {
+    Warn(
+        "Some road's successor lanes do not appear to be in continuous order, "
+        "please check the data for correctness.");
+    Warn(
+        "Explain: if a road has 4 lanes [marked as 1,2,3,4], if lane 1's "
+        "successor connects to road A and lane 3's successor connects to road "
+        "A, but lane 2's successor connects to road B, then the data is "
+        "incorrect.");
+    throw std::range_error("Only continuous next road plans are supported.");
   }
 }
 
