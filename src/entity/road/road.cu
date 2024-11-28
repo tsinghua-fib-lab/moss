@@ -2,6 +2,7 @@
 #include "entity/lane/lane.cuh"
 #include "entity/road/road.cuh"
 #include "moss.cuh"
+#include "utils/color_print.h"
 
 namespace moss::road {
 void Data::Init(Moss* S, const PbMap& map) {
