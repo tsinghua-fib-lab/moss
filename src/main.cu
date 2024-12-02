@@ -129,8 +129,9 @@ int main(int argc, char** argv) {
   }
 
   uint device = 0;
-  auto device_str = parser.get<std::string>("gpu");
-  device = std::stoi(device_str);
+  if (cfg["gpu"]) {
+    device = cfg["gpu"].as<int>();
+  }
 
   s.Init(name, {
                    .map_file = map_file,
