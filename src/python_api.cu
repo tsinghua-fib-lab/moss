@@ -308,26 +308,32 @@ class Engine {
     throw std::out_of_range("Road lane plan out of range.");
   }
 
-  // 获取用于输出的车辆信息 (id, parent_id, x, y, dir)
-  auto get_output_vehicles() {
-    vec<std::tuple<int, int, float, float>> out;
+  // 获取用于输出的人的信息
+  // get person information for output ([(id, status, parent_id, x, y, dir), ...], [x, ...], [y, ...])
+  auto get_output_persons() {
+    vec<std::tuple<int, int, int, float, float>> out;
     auto xs = new vec<float>;
     auto ys = new vec<float>;
     out.reserve(S.person.persons.size);
     xs->reserve(S.person.persons.size);
     ys->reserve(S.person.persons.size);
     for (auto& p : S.person.persons) {
-      if (p.runtime.status == PersonStatus::DRIVING) {
-        out.emplace_back(p.id,
-                         p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
-                         p.runtime.dir, p.runtime.v);
-        xs->push_back(p.runtime.x);
-        ys->push_back(p.runtime.y);
+      if (p.runtime.status == PersonStatus::DRIVING ||
+          p.runtime.status == PersonStatus::WALKING) {
+        if (S.config.x_min <= p.runtime.x && p.runtime.x <= S.config.x_max &&
+            S.config.y_min <= p.runtime.y && p.runtime.y <= S.config.y_max) {
+          out.emplace_back(p.id, int(p.runtime.status),
+                           p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
+                           p.runtime.dir, p.runtime.v);
+          xs->push_back(p.runtime.x);
+          ys->push_back(p.runtime.y);
+        }
       }
     }
     return std::make_tuple(out, asarray(xs), asarray(ys));
   }
-  // 获取用于输出的信号灯信息 (id, state, x, y)
+  // 获取用于输出的信号灯信息
+  // get traffic light information for output ([(id, state), ...], [x, ...], [y, ...])
   auto get_output_tls() {
     vec<std::tuple<int, int>> out;
     auto xs = new vec<float>;
@@ -341,6 +347,16 @@ class Engine {
       ys->push_back(l->center_y);
     }
     return std::make_tuple(out, asarray(xs), asarray(ys));
+  }
+  // 获取用于输出的路况信息
+  // get lane information for output [(id, level, v), ...]
+  auto get_output_roads() {
+    vec<std::tuple<int, int, float>> out;
+    out.reserve(S.road.roads.size);
+    for (auto& r : S.road.roads) {
+      out.emplace_back(r.id, int(r.status), r.v_avg);
+    }
+    return out;
   }
   // 设置信控模式
   void set_tl_policy(uint junction_index, uint policy) {
@@ -483,8 +499,9 @@ PYBIND11_MODULE(_moss, m) {
       .def("get_road_lane_plans", &Engine::get_road_lane_plans, no_gil())
       .def("get_road_lane_plan_index", &Engine::get_road_lane_plan_index,
            no_gil())
-      .def("get_output_vehicles", &Engine::get_output_vehicles, no_gil())
+      .def("get_output_persons", &Engine::get_output_persons, no_gil())
       .def("get_output_tls", &Engine::get_output_tls, no_gil())
+      .def("get_output_roads", &Engine::get_output_roads, no_gil())
       .def("set_lane_restriction", &Engine::set_lane_restriction,
            "lane_index"_a, "flag"_a, no_gil())
       .def("set_lane_restriction_batch", &Engine::set_lane_restriction_batch,

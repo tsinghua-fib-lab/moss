@@ -100,12 +100,17 @@ class DBRecorder:
         - in_vehicle_cnt: The in vehicle count of the road.
         - out_vehicle_cnt: The out vehicle count of the road.
         - cnt: The count of the road.
+    - {output_name}_s_aoi: The number of people in AOI (no content, only for compatibility)
+        - step: The step of the simulation.
+        - id: The id of the AOI.
+        - cnt: The count of the people in the AOI.
 
     The index of the table is as follows:
     - {output_name}_s_cars: (step, lng, lat)
     - {output_name}_s_people: (step, lng, lat)
     - {output_name}_s_traffic_light: (step, lng, lat)
     - {output_name}_s_road: (step)
+    - {output_name}_s_aoi: (step)
     """
 
     def __init__(self, eng: Engine):
@@ -123,8 +128,9 @@ class DBRecorder:
         self.data.append(
             [
                 self.eng._e.get_current_step(),
-                self.eng._e.get_output_vehicles(),
+                self.eng._e.get_output_persons(),
                 self.eng._e.get_output_tls(),
+                self.eng._e.get_output_roads(),
             ]
         )
 
@@ -138,24 +144,40 @@ class DBRecorder:
         - output_name: The name of the simulation that will be saved to the database.
         - use_tqdm: Whether to use tqdm or not.
         """
-        vehs = []
+        persons = []
+        """
+        List -> [step, ps, xs, ys]
+        ps -> List[(p.id, p.status, p.lane_id, p.direction, p.v)]
+            status == 1: walking
+            status == 2: driving
+        xs -> List[float]
+        ys -> List[float]
+        """
         tls = []
-        xs = []
-        ys = []
+        all_step_xs = []
+        all_step_ys = []
+        roads = []
         proj = pyproj.Proj(self.eng._map.header.projection)
-        for step, (vs, vx, vy), (ts, tx, ty) in self.data:
-            if vs:
-                x, y = proj(vx, vy, True)
-                xs.extend(x)
-                ys.extend(y)
-                vehs.append([step, vs, x, y])
+        for step, (ps, pxs, pys), (ts, tx, ty), rs in self.data:
+            if ps:
+                xs, ys = proj(pxs, pys, True)
+                all_step_xs.extend(xs)
+                all_step_ys.extend(ys)
+                persons.append([step, ps, xs, ys])
             if ts:
                 x, y = proj(tx, ty, True)
-                xs.extend(x)
-                ys.extend(y)
+                all_step_xs.extend(x)
+                all_step_ys.extend(y)
                 tls.append([step, ts, x, y])
-        if xs:
-            min_lon, max_lon, min_lat, max_lat = min(xs), max(xs), min(ys), max(ys)
+            if rs:
+                roads.append([step, rs])
+        if all_step_xs:
+            min_lon, max_lon, min_lat, max_lat = (
+                min(all_step_xs),
+                max(all_step_xs),
+                min(all_step_ys),
+                max(all_step_ys),
+            )
         else:
             x1, y1, x2, y2 = self.eng._map_bbox
             min_lon, min_lat = proj(x1, y1, True)
@@ -207,6 +229,7 @@ class DBRecorder:
                     f"DROP TABLE IF EXISTS public.{output_name}_s_traffic_light;"
                 )
                 cur.execute(f"DROP TABLE IF EXISTS public.{output_name}_s_road;")
+                cur.execute(f"DROP TABLE IF EXISTS public.{output_name}_s_aoi;")
                 conn.commit()
 
                 # 创建表格
@@ -223,7 +246,8 @@ class DBRecorder:
                     model text NOT NULL,
                     z float8 NOT NULL,
                     pitch float8 NOT NULL,
-                    v float8 NOT NULL
+                    v float8 NOT NULL,
+                    num_passengers int4 NOT NULL
                 );
                 """
                 )
@@ -292,13 +316,44 @@ class DBRecorder:
                 )
                 conn.commit()
 
+                # 创建表格
+                # create table public.output_name_s_aoi
+                cur.execute(
+                    f"""
+                CREATE TABLE public.{output_name}_s_aoi (
+                    step int4 NOT NULL,
+                    id int4 NOT NULL,
+                    cnt int4 NOT NULL
+                );
+                """
+                )
+                cur.execute(
+                    f"CREATE INDEX {output_name}_s_aoi_step_idx ON public.{output_name}_s_aoi USING btree (step);"
+                )
+                conn.commit()
+
                 cur.copy_from(
                     StringIteratorIO(
-                        f"{step},{p},{l},{round(d,3)},{x},{y},,0,0,{round(v,3)}\n"
-                        for step, vs, x, y in tqdm(vehs, ncols=90, disable=not use_tqdm)
-                        for (p, l, d, v), x, y in zip(vs, x, y)
+                        f"{step},{id},{lane_id},{round(dir,3)},{x},{y},,0,0,{round(v,3)},0\n"
+                        for step, ps, x, y in tqdm(
+                            persons, ncols=90, disable=not use_tqdm
+                        )
+                        for (id, status, lane_id, dir, v), x, y in zip(ps, x, y)
+                        if status == 2
                     ),
                     f"{output_name}_s_cars",
+                    sep=",",
+                )
+                cur.copy_from(
+                    StringIteratorIO(
+                        f"{step},{id},{lane_id},{round(dir,3)},{x},{y},0,{round(v,3)},\n"
+                        for step, ps, x, y in tqdm(
+                            persons, ncols=90, disable=not use_tqdm
+                        )
+                        for (id, status, lane_id, dir, v), x, y in zip(ps, x, y)
+                        if status == 1
+                    ),
+                    f"{output_name}_s_people",
                     sep=",",
                 )
                 cur.copy_from(
@@ -308,6 +363,15 @@ class DBRecorder:
                         for (p, s), x, y in zip(ts, x, y)
                     ),
                     f"{output_name}_s_traffic_light",
+                    sep=",",
+                )
+                cur.copy_from(
+                    StringIteratorIO(
+                        f"{step},{id},{level},{round(v_avg,3)},0,0,0\n"
+                        for step, rs in tqdm(roads, ncols=90, disable=not use_tqdm)
+                        for id, level, v_avg in rs
+                    ),
+                    f"{output_name}_s_road",
                     sep=",",
                 )
                 conn.commit()
