@@ -1,0 +1,20 @@
+map_file: /path/to/map.pb
+person_file: /path/to/person.pb
+start_step: 21600
+total_step: 86400
+step_interval: 1
+person_limit: -1
+speed_stat_interval: 300
+seed: 43
+x_min: -1e999
+y_min: -1e999
+x_max: 1e999
+y_max: 1e999
+verbose_level: 2
+junction_tl_policy: 1
+junction_tl_duration: 30
+junction_yellow_time: 0
+phase_pressure_coeff: 1.5
+output:
+  enable: false
+  dir: "./log"
