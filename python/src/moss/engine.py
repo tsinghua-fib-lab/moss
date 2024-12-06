@@ -367,7 +367,8 @@ class Engine:
         persons = self.fetch_persons()
         status: NDArray[np.uint8] = persons["status"]
         return (
-            status == PersonStatus.DRIVING.value | status == PersonStatus.WALKING.value
+            (status == PersonStatus.DRIVING.value)
+            | (status == PersonStatus.WALKING.value)
         ).sum()
 
     def get_lane_statuses(self) -> NDArray[np.int8]:
