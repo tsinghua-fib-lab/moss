@@ -77,7 +77,14 @@ void Data::Init(Moss* S, const PbMap& map) {
     j.tl.lane_pressure.New(S->mem, j.lanes.size);
     auto& phases = j.tl.phases;
     auto& phase_duration = j.tl.phase_duration;
+
     // TODO: get phase from avaiable phases (pb.phases()) instead of fixed program
+
+    // warning for confused traffic light setting
+    if (pb.phases_size() > 0 && !pb.has_fixed_program()) {
+      Warn("junction ", j.id, " has phases but no fixed program, in MOSS, we now use the phases in fixed program as the candidate phases for max pressure algorithm, please check the input data");
+    }
+
     if (pb.has_fixed_program()) {
       auto& tl = pb.fixed_program();
       if (tl.phases_size() > 0) {

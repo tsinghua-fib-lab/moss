@@ -28,6 +28,7 @@ add_executable(moss
   entity/lane/lane.cu
   entity/person/person.cu
   entity/person/vehicle.cu
+  entity/person/vehicle_car_follow.cu
   entity/person/pedestrian.cu
   entity/road/road.cu
   mem/mem.cu
@@ -68,6 +69,7 @@ pybind11_add_module(_moss
   entity/lane/lane.cu
   entity/person/person.cu
   entity/person/vehicle.cu
+  entity/person/vehicle_car_follow.cu
   entity/person/pedestrian.cu
   entity/road/road.cu
   mem/mem.cu

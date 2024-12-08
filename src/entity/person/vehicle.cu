@@ -1,6 +1,7 @@
 #include <cassert>
 #include <stdexcept>
 #include "entity/person/person.cuh"
+#include "entity/person/vehicle_car_follow.cuh"
 #include "entity/road/road.cuh"
 #include "fmt/core.h"
 #include "moss.cuh"
@@ -132,8 +133,6 @@ const float MAX_NOISE_A = 0.5;
 const float ZERO_A_THRESHOLD = 0.1;
 // the distance to judge the end of the route (unit: meter)
 const float CLOSE_TO_END = 5;
-// IDM theta parameter
-const float IDM_THETA = 4;
 // the time factor to sense ahead vehicle (unit: second)
 // https://jtgl.beijing.gov.cn/jgj/94220/aqcs/139634/index.html
 const float VIEW_DISTANCE_FACTOR = 12;
@@ -160,25 +159,6 @@ __host__ __device__ float GetLCPhi(float v) {
   const float k = (5.0 - 25.0) / (25.0 - 0.0);
   const float b = 30.0;
   return max(k * v + b, 5) * PI / 180;
-}
-
-// IDM Car Following Model
-__device__ float IDMCarFollowAcc(Person& p, float target_speed,
-                                 float ahead_speed, float distance,
-                                 float min_gap, float headway) {
-  if (distance <= 0) {
-    // collision
-    return -1e999;
-  }
-  auto v = p.snapshot.v;
-  // https://en.wikipedia.org/wiki/Intelligent_driver_model
-  auto s =
-      min_gap + max(0, v * (headway + (v - ahead_speed) / 2.f /
-                                          sqrt(-p.veh_attr.usual_braking_a *
-                                               p.veh_attr.max_a)));
-  auto acc = p.veh_attr.max_a *
-             (1 - pow(v / target_speed, IDM_THETA) - pow(s / distance, 2));
-  return Clamp<float>(acc, p.veh_attr.max_braking_a, p.veh_attr.max_a);
 }
 
 // person runtime updater

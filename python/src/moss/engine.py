@@ -6,6 +6,7 @@ import threading
 from enum import Enum
 from glob import glob
 from typing import Dict, List, Tuple, Union
+from warnings import warn
 
 import numpy as np
 from numpy.typing import NDArray
@@ -141,6 +142,10 @@ class Engine:
         self._map = Map()
         with open(map_file, "rb") as f:
             self._map.ParseFromString(f.read())
+
+        # check the map file
+        self._map_warning()
+
         self.id2lanes = {lane.id: lane for lane in self._map.lanes}
         """
         Dictionary of lanes (Protobuf format) indexed by lane id
@@ -196,6 +201,13 @@ class Engine:
         """
         The CUDA device index
         """
+
+    def _map_warning(self):
+        for junc in self._map.junctions:
+            if len(junc.phases) > 0 and not junc.HasField("fixed_program"):
+                warn(
+                    f"junction {junc.id} has phases but no fixed program, in MOSS, we now use the phases in fixed program as the candidate phases for max pressure algorithm, please check the input data",
+                )
 
     @property
     def person_count(self) -> int:
