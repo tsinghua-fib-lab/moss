@@ -1,4 +1,5 @@
 #include "entity/person/person.cuh"
+#include "utils/utils.cuh"
 #include "entity/person/vehicle_car_follow.cuh"
 
 namespace moss {
@@ -18,7 +19,7 @@ __device__ float IDMCarFollowAcc(Person& p, float target_speed,
   auto v = p.snapshot.v;
   // https://en.wikipedia.org/wiki/Intelligent_driver_model
   auto s =
-      min_gap + max(0, v * (headway + (v - ahead_speed) / 2.f /
+      min_gap + max(0.0, v * (headway + (v - ahead_speed) / 2.f /
                                           sqrt(-p.veh_attr.usual_braking_a *
                                                p.veh_attr.max_a)));
   auto acc = p.veh_attr.max_a *

@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
   argparse::ArgumentParser parser("Moss", VER);
   parser.add_argument("-n", "--name").required().help("name of the simulation");
   parser.add_argument("-c", "--config").required().help("path to config file");
-  parser.add_argument("--gpu").default_value(0).help("GPU device ID");
+  parser.add_argument("--gpu").default_value(0).help("GPU device ID").scan<'i', int>();
   parser.add_argument("-q", "--quiet")
       .default_value(false)
       .implicit_value(true);
@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
   float speed_stat_interval = 300;  // default: 300
   if (cfg["speed_stat_interval"]) {
     speed_stat_interval = cfg["speed_stat_interval"].as<float>();
-    assert(speed_stat_interval > 0);
+    assert(speed_stat_interval >= 0);
   }
   uint start_step, total_step;
   if (cfg["start_step"]) {
@@ -123,14 +123,10 @@ int main(int argc, char** argv) {
   if (cfg["phase_pressure_coeff"]) {
     phase_pressure_coeff = cfg["phase_pressure_coeff"].as<float>();
   }
-  float device_mem = 0;
-  if (cfg["device_mem"]) {
-    device_mem = cfg["device_mem"].as<float>();
-  }
 
-  uint device = 0;
-  if (cfg["gpu"]) {
-    device = cfg["gpu"].as<int>();
+  int device = uint(parser.get<int>("gpu"));
+  if (device < 0) {
+    Fatal("Invalid GPU device ID: ", device);
   }
 
   s.Init(name, {
@@ -151,8 +147,7 @@ int main(int argc, char** argv) {
                    .n_workers = 0,
                    .junction_yellow_time = junction_yellow_time,
                    .phase_pressure_coeff = phase_pressure_coeff,
-                   .device = device,
-                   .device_mem = device_mem,
+                   .device = uint(device),
                });
   t_init = Time() - t_init;
   // set junction traffic light policy

@@ -1,11 +1,12 @@
 #include <cassert>
 #include "entity/aoi/aoi.cuh"
 #include "entity/person/person.cuh"
+#include "utils/utils.cuh"
 
 namespace moss::person {
 
 __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
-  bool is_end;
+  bool is_end = false;
   float s = p.snapshot.s;
   auto& segments = p.route->ped->route;
   auto seg = segments[p.route_index];
@@ -16,8 +17,10 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
     v *= 2;  // red light, go faster
   }
   float ds = v * dt;
-  // printf("Ped %d Lane %d forward %d s %.3f+%.3f/%.3f\n", p.id, seg.lane->id,
-  //        p.runtime.is_forward, s, ds, seg.lane->length);
+  // printf(
+  //     "Ped %d Lane %d forward %d s %.3f+%.3f/%.3f, current_route_index %d/%d\n",
+  //     p.id, seg.lane->id, p.runtime.is_forward, s, ds, seg.lane->length,
+  //     p.route_index, segments.size);
 
   // add increment to s
   if (seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD) {
@@ -27,16 +30,18 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
   }
   // for loop to update s, person position, route_index until s is in the range
   while (true) {
+    // printf("Ped %d ShouldNext %d\n", p.id, s < 0 || s > seg.lane->length);
     bool shouldNext = s < 0 || s > seg.lane->length;
     if (!shouldNext) {
       break;
     }
     // check if the next segment is a no entry lane
     if (p.route_index + 1 < segments.size) {
+      // printf("Ped %d Next %d\n", p.id, p.route_index + 1);
       if (segments[p.route_index + 1].lane->IsNoEntry()) {
         // do nothing, just return
         p.runtime.v = 0;
-        return;
+        return false;
       }
       // go to the next segment
       if (s < 0) {
@@ -44,6 +49,7 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
       } else if (s > seg.lane->length) {
         s -= seg.lane->length;
       }
+      // printf("Ped %d New S %.3f, go to next route\n", p.id, s);
       ++p.route_index;
       seg = segments[p.route_index];
       if (seg.dir == MovingDirection::MOVING_DIRECTION_FORWARD) {
@@ -52,6 +58,7 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
         // reverse the s
         s = seg.lane->length - s;
       }
+      // printf("Ped %d New Lane %d, forward %d, new S\n", p.id, seg.lane->id, seg.dir, s);
     } else {
       // there is no next segment, the person is at the end of the route
       is_end = true;

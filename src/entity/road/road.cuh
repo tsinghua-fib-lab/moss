@@ -28,16 +28,16 @@ struct Road {
   float max_speed;
   float v_avg;   // 平均车速
   float status;  // 拥堵程度，1~5表示逐渐拥堵
-  MArrZ<Lane*> lanes;
+  MArr<Lane*> lanes;
   Lane* right_driving_lane;
   Lane* walking_lane;
   // 可以去往下一条road的车道信息
   // the road lanes that can go to the next road
-  MArrZ<NextRoadLaneGroup> next_road_lane_groups;
+  MArr<NextRoadLaneGroup> next_road_lane_groups;
   // 对于含有动态车道的road，会有多套nrl方案，每套方案对应上述数组的范围在此指定
   // for roads with dynamic lanes, there are multiple next road lane (nrl)
   // plans, each plan
-  MArrZ<uint> nrl_ranges;
+  MArr<uint> nrl_ranges;
   // 当前启用的next_road_lanes范围，[a,b)
   // 这是为了于给普通道路代码提供fast-path
   // the current enabled next_road_lanes range, [a,b)
@@ -46,7 +46,7 @@ struct Road {
 
 namespace road {
 struct Data {
-  MArrZ<Road> roads;
+  MArr<Road> roads;
   std::unordered_map<uint, Road*> road_map;
   float k_status;  // 平滑系数
 

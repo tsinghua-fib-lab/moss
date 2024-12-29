@@ -5,7 +5,6 @@
 #include <vector>
 #include "containers/array.cuh"
 #include "containers/list.cuh"
-#include "containers/vector.cuh"
 #include "entity/person/route.cuh"
 #include "fmt/core.h"
 #include "output/person.h"
@@ -65,7 +64,7 @@ struct Trip {
 };
 
 struct Schedule {
-  MArrZ<Trip> trips;
+  MArr<Trip> trips;
   // departure time related data
   // < 0 means null
   float wait, departure;
@@ -158,7 +157,7 @@ struct Person;
 
 struct PersonNode {
   bool is_shadow : 1;
-  uint index : 31;        // index in the array
+  uint index : 31;  // index in the array
   float s;
   Person* self;
   // add / remove buffer linked list node
@@ -173,7 +172,7 @@ struct PersonNode {
   // side vehicles: [left|right][front|back]
   PersonNode* sides[2][2];
 
-  __host__ __device__ void PrintDebugString(bool show_link=true) const;
+  __host__ __device__ void PrintDebugString(bool show_link = true) const;
 };
 
 #define LEFT (0)
@@ -223,7 +222,7 @@ struct Person {
 
   // schedule
   // SET in Data::Init()
-  MArrZ<Schedule> schedules;
+  MArr<Schedule> schedules;
   // current schedule index and trip index
   // SET in NextTrip()
   uint schedule_index, trip_index;
@@ -305,6 +304,13 @@ struct Person {
                                                  bool ignore_error = false);
   // Go to the next route for the vehicle
   __device__ bool NextVehicleRoute();
+
+  // ===== functions for controlling the vehicle =====
+
+  // set the route of the current schedule and trip
+  // in the function, we will check the valid of the person and the route's
+  // starting point and ending point
+  __host__ void SetVehicleRoute(Moss* S, const std::vector<uint>& route);
 };
 
 namespace person {
@@ -315,8 +321,8 @@ struct MData {
 #endif
 };
 struct Data {
-  MArrZ<Person> persons;
-  MArrZ<PersonOutput> outputs;
+  MArr<Person> persons;
+  MArr<PersonOutput> outputs;
   std::map<uint, Person*> person_map;
   cudaStream_t stream;
   MData* M;

@@ -5,127 +5,124 @@
 #include <stdio.h>
 #include <cassert>
 #include <mutex>
+#include <queue>
+#include <unordered_map>
+#include <vector>
+#include "utils/color_print.h"
 #include "utils/macro.h"
 
 unsigned long long operator""_GiB(unsigned long long x);
 unsigned long long operator""_MiB(unsigned long long x);
 
-// memory manager for cuda unified memory
-// support static memory allocation only
-struct MemManager {
-  unsigned long long _start, _ptr, _size, _usage;
-  std::mutex mtx;
-  bool verbose;
+class RawPtr {
+ public:
+  void* ptr;
+  size_t size;
+
+  RawPtr(void* ptr, size_t size) : ptr(ptr), size(size) {}
+};
+
+class MemBlock {
+ public:
+  void*
+      ptr;  // start address of memory block (nullptr means the block is empty)
+  size_t size;  // memory block size
+  bool free;    // whether the block is free
+  int self_i;   // self index in the memory block vector
+  int prev_i;   // previous block in the same cudaMallocManaged memory
+  int next_i;   // next block in the same cudaMallocManaged memory
+
+  MemBlock(void* p, size_t s, int self_i)
+      : ptr(p), size(s), free(true), self_i(self_i), prev_i(-1), next_i(-1) {}
+
+  inline bool Empty() { return ptr == nullptr; }
+};
+
+class MemManager {
+  struct Checkpoint {
+    std::vector<char*> data;       // data snapshot
+    std::vector<MemBlock> blocks;  // block snapshot
+  };
+
+ private:
+  static const size_t MIN_BLOCK_SIZE = 256;  // min block size：256B
+  static const size_t DEFAULT_ALLOCATE_SIZE =
+      1 << 26;                          // default allocate size：64MiB
+  static const size_t ALIGNMENT = 256;  // memory alignment：256字节
+  static const size_t ALIGN_MASK = ALIGNMENT - 1;
+
   uint device;
+  bool verbose;
 
-  __device__ unsigned long long _d_malloc(size_t size);
-  unsigned long long _malloc(size_t size);
-  static MemManager* New(size_t size, uint device, bool verbose) {
-    MemManager* ptr;
-    CUCHECK(cudaMallocManaged((void**)&ptr, sizeof(MemManager)));
-    CUCHECK(cudaMemset(ptr, 0, sizeof(MemManager)));
-    ptr->Init(size, device, verbose);
-    return ptr;
-  }
-  void Init(size_t size, uint device, bool verbose);
-  void PrintUsage();
-  void PreferCPU();
-  void PreferGPU();
+  std::vector<RawPtr> raw_ptrs;          // raw pointers for cudaMallocManaged
+  std::vector<MemBlock> blocks;          // memory blocks
+  std::unordered_map<void*, int> ptr2i;  // ptr to index map
+  std::queue<int> empty_indices;         // empty indices for next "new" block
 
-  template <class T>
-  void MallocManaged(T** x, size_t size) {
-    // align to 16 bytes
-    *x = (T*)_malloc((size + 15) & ~15);
+  std::mutex mtx;     // mutx for thread safety
+  int next_search_i;  // last block iterator for quick search
+
+  std::vector<Checkpoint> checkpoints;  // memory checkpoints
+
+  // create a new block
+  int new_block(void* ptr, size_t size);
+
+  // find a free block that can hold the memory of size
+  int find_fit(size_t size);
+
+  // coalesce adjacent free blocks
+  void coalesce(int i);
+
+ public:
+  MemManager(uint device, bool verbose, size_t reserve_space = 1024 * 1024)
+      : device(device), verbose(verbose) {
+    next_search_i = -1;
+    blocks.reserve(reserve_space);
   }
-  template <class T>
-  __host__ __device__ void Free(T* ptr) {
-    if (ptr) {
-      // do nothing
+
+  ~MemManager() {
+    for (auto ptr : raw_ptrs) {
+      cudaFree(ptr.ptr);
     }
   }
 
-  // malloc T on device by cudaMallocManaged
+  // allocate memory
+  void* allocate(size_t size);
+  // deallocate memory
+  void deallocate(void* ptr);
+  void PreferCPU();
+  void PreferGPU();
+  void PrintUsage();
+
   template <class T>
-  T* MValue() {
-    T* t;
-    MallocManaged(&t, sizeof(T));
+  T* MValue(bool zero_init = true) {
+    T* t = static_cast<T*>(allocate(sizeof(T)));
+    if (zero_init) {
+      CUCHECK(cudaMemset(t, 0, sizeof(T)));
+    }
     return t;
   }
 
   template <class T>
-  T* MValueZero() {
-    T* t;
-    MallocManaged(&t, sizeof(T));
-    CUCHECK(cudaMemset(t, 0, sizeof(T)));
+  T* MArray(size_t size, bool zero_init = true) {
+    T* t = static_cast<T*>(allocate(size * sizeof(T)));
+    if (zero_init) {
+      CUCHECK(cudaMemset(t, 0, size * sizeof(T)));
+    }
     return t;
   }
 
   template <class T>
-  void MValueZero(T*& x) {
-    MallocManaged(&x, sizeof(T));
-    CUCHECK(cudaMemset(x, 0, sizeof(T)));
+  void Free(T* ptr) {
+    deallocate(ptr);
   }
 
-  template <class T>
-  void MValue(T*& x) {
-    MallocManaged(&x, sizeof(T));
-  }
+  // save the whole memory to a cpu memory
+  // return a id for this memory checkpoint for further restore
+  int Save();
 
-  // malloc array on device by cudaMallocManaged
-  template <class T>
-  T* MArray(size_t size) {
-    T* t;
-    MallocManaged(&t, size * sizeof(T));
-    return t;
-  }
-
-  // malloc array on device by cudaMallocManaged
-  template <class T>
-  void MArray(T*& x, size_t size) {
-    MallocManaged(&x, size * sizeof(T));
-  }
-
-  // malloc array on device by cudaMallocManaged and set to zero
-  template <class T>
-  T* MArrayZero(size_t size) {
-    T* t;
-    MallocManaged(&t, size * sizeof(T));
-    CUCHECK(cudaMemset(t, 0, size * sizeof(T)));
-    return t;
-  }
-
-  // 全零的MArray
-  template <class T>
-  void MArrayZero(T*& x, size_t size) {
-    MallocManaged(&x, size * sizeof(T));
-    memset(x, 0, size * sizeof(T));
-  }
+  // restore the memory checkpoint by id
+  void Restore(int checkpoint_id);
 };
-
-// 从GPU复制数据到CPU
-template <class T>
-void Sync(T& dst, const T* src) {
-  CUCHECK(cudaMemcpy(&dst, src, sizeof(T), cudaMemcpyDeviceToHost));
-}
-
-// 从GPU复制数组到CPU
-template <class T>
-void Sync(T* dst, const T* src, size_t size) {
-  CUCHECK(cudaMemcpy(dst, src, size * sizeof(T), cudaMemcpyDeviceToHost));
-}
-
-template <class T>
-__global__ void _cpy(T* dst, const T* src, size_t size) {
-  memcpy(dst, src, size * sizeof(T));
-}
-
-// 从GPU Heap复制数据到CPU
-// template <class T>
-// void SyncHeap(T* dst, const T* src, size_t size) {
-//   T* tmp = DArray<T>(size);
-//   _cpy<<<1, 1>>>(tmp, src, size);
-//   cudaMemcpy(dst, tmp, size * sizeof(T), cudaMemcpyDeviceToHost);
-//   // Free(tmp);
-// }
 
 #endif

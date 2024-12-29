@@ -76,8 +76,6 @@ void SetGridBlockSize(Func func, int size, int sm_count, int& grid_size,
   grid_size = (size + block_size - 1) / block_size;
 }
 
-void PrintMem();
-
 // 二分查找 arr[i-1]<=x<arr[i]，i=0~n
 template <class T>
 __host__ __device__ uint Search(T* arr, uint n, T x) {

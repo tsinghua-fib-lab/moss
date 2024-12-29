@@ -4,7 +4,10 @@
 #include "entity/person/vehicle_car_follow.cuh"
 #include "entity/road/road.cuh"
 #include "fmt/core.h"
+#include "mem/mem.cuh"
 #include "moss.cuh"
+#include "utils/debug.cuh"
+#include "utils/utils.cuh"
 
 namespace moss {
 
@@ -125,8 +128,53 @@ __host__ __device__ Lane* Person::FindNextJunctionLane(Lane* road_lane,
   return next_lane;
 }
 
-namespace person {
+__host__ void Person::SetVehicleRoute(Moss* S,
+                                      const std::vector<uint>& route) {
+  // 1. check the person is at DRIVING state
+  if (runtime.status != PersonStatus::DRIVING) {
+    printf(RED("[Error] Person[%d] is not at DRIVING state\n"), id);
+    throw std::runtime_error("Person is not at DRIVING state");
+    return;
+  }
+  // 2. check the route is valid
+  // 2.1. the starting road of the route is the same as the current road
+  if (route_in_junction) {
+    printf(RED("[Error] Person[%d] is in junction lane\n"), id);
+    throw std::runtime_error("Person is in junction lane");
+    return;
+  }
+  if (route.size() == 0) {
+    printf(RED("[Error] Empty route for Person[%d]\n"), id);
+    throw std::runtime_error("Empty route");
+    return;
+  }
+  if (route[0] != runtime.lane->parent_road->id) {
+    printf(RED("[Error] Person[%d] is not at the starting road of the route\n"),
+           id);
+    throw std::runtime_error("Person is not at the starting road of the route");
+    return;
+  }
+  // 2.2. the ending road of the route is the same as the trip's ending road
+  if (route.back() != trip->end_lane->parent_road->id) {
+    printf(RED("[Error] Person[%d] is not at the ending road of the route\n"),
+           id);
+    throw std::runtime_error("Person is not at the ending road of the route");
+    return;
+  }
+  // 3. set the route
+  // 3.1 clear the current route
+  this->route->veh->route.Free(S->mem);
+  route_index = 0;
+  route_in_junction = false;
+  force_lc = false;
+  // 3.2 set the new route
+  this->route->veh->route.New(S->mem, route.size());
+  for (int i = 0; i < route.size(); ++i) {
+    this->route->veh->route[i] = S->road.At(route[i]);
+  }
+}
 
+namespace person {
 // maximum noise of acceleration (m/s^2)
 const float MAX_NOISE_A = 0.5;
 // threshold of zero acceleration checking (m/s^2)
@@ -142,8 +190,8 @@ const float MIN_VIEW_DISTANCE = 50;
 // only at the end of the lane
 const float LC_FORBIDDEN_DISTANCE = 20;
 // 变道长度与车速的关系
-// the multiple factor of the vehicle speed to calculate the lane change length
-// (unit: second)
+// the multiple factor of the vehicle speed to calculate the lane change
+// length (unit: second)
 const float LC_LENGTH_FACTOR = 3;
 // 自主变道让后车刹车的加速度阈值相对其最大刹车加速度的偏差
 // the threshold of the deviation of the acceleration that makes the back
@@ -317,8 +365,8 @@ __device__ void PlanLaneChange(Person& p, float t, float dt) {
     p.force_lc = false;
   }
   if (p.force_lc) {
-    // at the left/right side of the target lane, the vehicle should change lane
-    // to the right/left side
+    // at the left/right side of the target lane, the vehicle should change
+    // lane to the right/left side
     auto side = route_lc_offset > 0 ? RIGHT : LEFT;
     auto target = p.snapshot.lane->side_lanes[side];
     p.lc_last_t = t;
@@ -329,8 +377,8 @@ __device__ void PlanLaneChange(Person& p, float t, float dt) {
     SetAcc(p, p.veh_attr.usual_braking_a, AccReason::LANE_CHANGE_N);
     p.lc_phi = 0;
     // check the vehicle behind
-    // because you are forcing to change lane, you should check the back vehicle
-    // and drive slow to avoid rear-end
+    // because you are forcing to change lane, you should check the back
+    // vehicle and drive slow to avoid rear-end
     if (p.node.sides[side][BACK]) {
       auto& back = *p.node.sides[side][BACK]->self;
       auto a3 =
@@ -372,8 +420,8 @@ __device__ void PlanLaneChange(Person& p, float t, float dt) {
   // 要求变道后：
   // Required after lane change:
   // 1. [3]不会追尾[5]：预期加速度不能小于安全刹车加速度+LC_SAFE_BRAKING_BIAS
-  // 1. [3] will not rear-end [5]: the expected acceleration cannot be less than
-  // the safe braking acceleration + LC_SAFE_BRAKING_BIAS
+  // 1. [3] will not rear-end [5]: the expected acceleration cannot be less
+  // than the safe braking acceleration + LC_SAFE_BRAKING_BIAS
   // 2. 整体加速度提升大于阈值: da = da0 + α*(da2+da3) > 0
   // 2. The overall acceleration increase is greater than the threshold: da =
   // da0 + α*(da2+da3) > 0
@@ -465,8 +513,8 @@ __device__ void PlanLaneChange(Person& p, float t, float dt) {
 
   // Follow: Shuo Feng, Xintao Yan, Haowei Sun, Yiheng Feng, and Henry X Liu.
   // Intelligent driving intelligence test for autonomous vehicles with
-  // naturalistic and adversarial environment. Nature communications, 12(1):748,
-  // 2021.
+  // naturalistic and adversarial environment. Nature communications,
+  // 12(1):748, 2021.
   float u = da[0] + da[1];
   float p_lc = 2e-8;
   if (u >= 1) {
@@ -581,8 +629,8 @@ __device__ void RefreshRuntime(Person& p, float dt, float* out_ds,
       // Status 3: the new target is the other neighbor of the
       // shadow lane, put the vehicle back to the shadow lane (revert the lane
       // changing)
-      // Status 4: the new target is the other neighbor of the lane, finish the
-      // lane changing
+      // Status 4: the new target is the other neighbor of the lane, finish
+      // the lane changing
       if (p.lc_target == p.runtime.lane) {
         // status 1
       } else if (p.lc_target == p.runtime.shadow_lane) {

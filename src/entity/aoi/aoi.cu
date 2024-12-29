@@ -22,6 +22,7 @@ __host__ __device__ float Aoi::GetDrivingS(Lane* lane) {
   printf(RED("[Error] Lane[%d] not found in aoi[%d]'s driving gates\n"),
          lane->id, id);
   assert(false);
+  return 0;
 }
 
 __host__ __device__ float Aoi::GetWalkingS(Lane* lane) {
@@ -33,6 +34,7 @@ __host__ __device__ float Aoi::GetWalkingS(Lane* lane) {
   printf(RED("[Error] Lane[%d] not found in aoi[%d]'s walking gates\n"),
          lane->id, id);
   assert(false);
+  return 0;
 }
 
 namespace aoi {

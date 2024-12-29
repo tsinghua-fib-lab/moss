@@ -44,7 +44,7 @@ class Engine {
          float junction_yellow_time, float phase_pressure_coeff,
          float speed_stat_interval, const std::string& output_dir,
          float out_xmin, float out_ymin, float out_xmax, float out_ymax,
-         uint device, float device_mem)
+         uint device)
       : S() {
     auto config = Config{
         .map_file = map_file,
@@ -67,7 +67,6 @@ class Engine {
         .junction_yellow_time = junction_yellow_time,
         .phase_pressure_coeff = phase_pressure_coeff,
         .device = device,
-        .device_mem = device_mem,
     };
     S.Init(name, config);
   }
@@ -81,7 +80,7 @@ class Engine {
     Info("Call fetch_persons");
     // define
     auto* ids = new vec<int>();
-    auto* statuses = new vec<int8_t>();
+    auto* statuses = new vec<int>();
     auto* lane_ids = new vec<int>();
     auto* lane_parent_ids = new vec<int>();
     auto* ss = new vec<float>();
@@ -125,7 +124,7 @@ class Engine {
     // copy
     for (auto& p : S.person.persons) {
       ids->push_back(int(p.id));
-      statuses->push_back((int8_t)p.runtime.status);
+      statuses->push_back(int(p.runtime.status));
       if (p.runtime.lane) {
         lane_ids->push_back(p.runtime.lane->id);
         if (p.runtime.lane->parent_is_road) {
@@ -309,7 +308,8 @@ class Engine {
   }
 
   // 获取用于输出的人的信息
-  // get person information for output ([(id, status, parent_id, x, y, dir), ...], [x, ...], [y, ...])
+  // get person information for output ([(id, status, parent_id, x, y, dir),
+  // ...], [x, ...], [y, ...])
   auto get_output_persons() {
     vec<std::tuple<int, int, int, float, float>> out;
     auto xs = new vec<float>;
@@ -333,7 +333,8 @@ class Engine {
     return std::make_tuple(out, asarray(xs), asarray(ys));
   }
   // 获取用于输出的信号灯信息
-  // get traffic light information for output ([(id, state), ...], [x, ...], [y, ...])
+  // get traffic light information for output ([(id, state), ...], [x, ...], [y,
+  // ...])
   auto get_output_tls() {
     vec<std::tuple<int, int>> out;
     auto xs = new vec<float>;
@@ -432,6 +433,7 @@ class Engine {
     }
   }
   // 设置动态道路的车道方案
+  // set road lane plan
   void set_road_lane_plan(uint road_index, uint plan_index) {
     if (road_index >= S.road.roads.size) {
       throw std::out_of_range("Road index out of range.");
@@ -450,6 +452,11 @@ class Engine {
       set_road_lane_plan(road_indices[i], plan_indices[i]);
     }
   }
+  // set vehicle route, route is a list of road ids
+  void set_vehicle_route(uint person_id, const std::vector<uint>& route) {
+    auto p = S.person.At(person_id);
+    p->SetVehicleRoute(&S, route);
+  }
   void next_step(uint n) {
     // // 中间的步骤就没有必要更新输出，节省时间
     for (int i = 1; i < n; ++i) {
@@ -459,6 +466,8 @@ class Engine {
       S.Step();
     }
   }
+  int save() { return S.Save(); }
+  void restore(int checkpoint_id) { S.Restore(checkpoint_id); }
 };
 
 void set_device(int device_id) { CUCHECK(cudaSetDevice(device_id)); }
@@ -473,15 +482,13 @@ PYBIND11_MODULE(_moss, m) {
       .def_readonly_static("__version__", &VER)
       .def(py::init<const std::string&, const std::string&, const std::string&,
                     uint, float, int, int, int, float, float, float,
-                    const std::string&, float, float, float, float, uint,
-                    float>(),
+                    const std::string&, float, float, float, float, uint>(),
            "name"_a, "map_file"_a, "person_file"_a, "start_step"_a,
            "step_interval"_a = 1, "seed"_a = 43, "verbose_level"_a = 0,
            "person_limit"_a = -1, "junction_yellow_time"_a = 3,
            "phase_pressure_coeff"_a = 1.5, "speed_stat_interval"_a = 0,
            "output_dir"_a = "", "out_xmin"_a = 0, "out_ymin"_a = 0,
-           "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0,
-           "device_mem"_a = 0, no_gil())
+           "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0, no_gil())
       .def("next_step", &Engine::next_step, "n"_a = 1, no_gil())
       .def("get_current_step", &Engine::get_current_step, no_gil())
       .def("get_current_time", &Engine::get_current_time, no_gil())
@@ -525,7 +532,11 @@ PYBIND11_MODULE(_moss, m) {
       .def("set_road_lane_plan", &Engine::set_road_lane_plan, "road_index"_a,
            "plan_index"_a, no_gil())
       .def("set_road_lane_plan_batch", &Engine::set_road_lane_plan_batch,
-           "road_indices"_a, "plan_indices"_a, no_gil());
+           "road_indices"_a, "plan_indices"_a, no_gil())
+      .def("set_vehicle_route", &Engine::set_vehicle_route, "person_id"_a,
+           "route"_a, no_gil())
+      .def("make_checkpoint", &Engine::save, no_gil())
+      .def("restore_checkpoint", &Engine::restore, "checkpoint_id"_a, no_gil());
   m.attr("__version__") = VER;
   m.def("set_device", set_device, "device_id"_a, no_gil());
   m.def("get_device", get_device, no_gil());

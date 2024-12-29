@@ -13,15 +13,15 @@ struct MPTLRuntime {
 
 struct MPTrafficLight {
   bool ok;  // 是否启用
-  MArrZ<MArrZ<LightState>>
+  MArr<MArr<LightState>>
       phases;  // 可供最大压力算法选择的相位列表（如果nil，则没有信控）
   uint phase_index;                   // 当前相位
-  MArrZ<LightState> yellow_phases;    // 黄灯状态下的相位
+  MArr<LightState> yellow_phases;    // 黄灯状态下的相位
   bool is_yellow;                     // 为nil代表当前不处在黄灯状态
   uint next_index;                    // 黄灯状态后的下一个相位
-  MArrZ<float> lane_pressure;         // 车道压力
-  MArrZ<float> phase_pressure_coeff;  // 相位压力系数，随着时间增长
-  MArrZ<float> phase_duration;        // 相位时长[API]
+  MArr<float> lane_pressure;         // 车道压力
+  MArr<float> phase_pressure_coeff;  // 相位压力系数，随着时间增长
+  MArr<float> phase_duration;        // 相位时长[API]
   MPTLRuntime snapshot, runtime;      // 运行时数据
   bool set_force;                     // 强制切换到下一个相位[API]
 };

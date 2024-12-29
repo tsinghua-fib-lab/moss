@@ -17,7 +17,7 @@ struct AoiGate {
 
 struct Aoi {
   uint id;
-  MArrZ<AoiGate> walking_gates, driving_gates;
+  MArr<AoiGate> walking_gates, driving_gates;
   // position
   float x, y;
 
@@ -27,7 +27,7 @@ struct Aoi {
 
 namespace aoi {
 struct Data {
-  MArrZ<Aoi> aois;
+  MArr<Aoi> aois;
   std::unordered_map<uint, Aoi*> aoi_map;
   Moss* S;
 

@@ -4,7 +4,6 @@
 #include <utility>
 #include <vector>
 #include "containers/array.cuh"
-#include "containers/vector.cuh"
 #include "containers/list.cuh"
 #include "fmt/core.h"
 #include "output/output.cuh"
@@ -57,13 +56,13 @@ struct Lane {
   bool restriction, in_restriction;
   // geometry of the lane
   // point list
-  MArrZ<Point> line;
+  MArr<Point> line;
   // accumulated length of each line segment
-  MArrZ<float> line_lengths;
+  MArr<float> line_lengths;
   // direction of each line segment
-  MArrZ<float> line_directions;
+  MArr<float> line_directions;
   // lane connections
-  MArrZ<LaneConnection> predecessors, successors;
+  MArr<LaneConnection> predecessors, successors;
   // the first predecessor and successor (only for junction lane)
   Lane *predecessor, *successor;
   // the left and right side lanes
@@ -100,9 +99,9 @@ __host__ __device__ float ProjectFromLane(Lane* src_lane, Lane* dest_lane,
 namespace lane {
 using Type = PbLaneType;
 struct Data {
-  MArrZ<Lane> lanes;
-  MArrZ<Lane*> output_lanes;
-  MArrZ<TlOutput> outputs;
+  MArr<Lane> lanes;
+  MArr<Lane*> output_lanes;
+  MArr<TlOutput> outputs;
   std::unordered_map<uint, Lane*> lane_map;
   cudaStream_t stream;
   Moss* S;

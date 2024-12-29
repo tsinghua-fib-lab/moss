@@ -21,7 +21,6 @@ execute_process(
 
 add_executable(moss
   main.cu
-  containers/vector.cu
   entity/aoi/aoi.cu
   entity/junction/junction.cu
   entity/junction/trafficlight/trafficlight.cu
@@ -46,7 +45,10 @@ set_target_properties(moss PROPERTIES
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  target_compile_options(moss PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
+  target_compile_options(moss 
+  PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>
+)
+  target_link_options(moss PRIVATE -pg)
 endif()
 
 target_include_directories(moss PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -62,7 +64,6 @@ target_compile_definitions(moss PRIVATE VERSION="build.${DATE}")
 
 pybind11_add_module(_moss
   python_api.cu
-  containers/vector.cu
   entity/aoi/aoi.cu
   entity/junction/junction.cu
   entity/junction/trafficlight/trafficlight.cu
@@ -87,7 +88,7 @@ set_target_properties(_moss PROPERTIES
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  target_compile_options(moss PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
+  target_compile_options(_moss PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
 endif()
 
 target_link_libraries(_moss

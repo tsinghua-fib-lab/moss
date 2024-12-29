@@ -48,8 +48,8 @@ void StepOutput::Init(const std::string& output_dir, const std::string& name,
   project_file.close();
 }
 
-void StepOutput::Write(float t, const MArrZ<PersonOutput>& person_outputs,
-                       const MArrZ<TlOutput>& tl_outputs) {
+void StepOutput::Write(float t, const MArr<PersonOutput>& person_outputs,
+                       const MArr<TlOutput>& tl_outputs) {
   if (!_enable) {
     return;
   }

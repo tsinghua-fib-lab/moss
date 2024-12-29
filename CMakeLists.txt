@@ -77,5 +77,3 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(avro)
 
 add_subdirectory(src)
-
-# add_subdirectory(tests)

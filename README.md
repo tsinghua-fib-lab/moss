@@ -60,7 +60,12 @@ e = Engine(
     speed_stat_interval=300, # open road status statistics
     verbose_level=Verbosity.ALL,
 )
-recorder = DBRecorder(e) # used for PostgreSQL output
+recorder = DBRecorder(
+    e,
+    "postgres://user:password@url:port/simulation",
+    "map_db.map_coll", # map collection used for webui-backend
+    "name",
+) # used for PostgreSQL output
 for _ in range(3600):
     e.next_step(1)
     recorder.record()
@@ -68,12 +73,7 @@ for _ in range(3600):
     # persons = e.fetch_persons()
     # ...
 # save the simulation results to the database
-recorder.save(
-    "postgres://user:password@url:port/simulation",
-    "map_db.map_coll", # map collection used for webui-backend
-    "name",
-    True,
-)
+recorder.flush()
 ```
 
 ## FAQ
@@ -141,6 +141,13 @@ pip install . -v
 5. You can submit a pull request to the repository to contribute to the project.
 
 ## Version History
+
+#### v1.1
+
+- We apply a CUDA memory arena to do dynamic memory allocation in the GPU memory, which make the project been seen as a right CUDA project.
+- Based on the memory arena, we implement the checkpoint mechanism to save the simulation state to CPU memory and restore it from CPU memory.
+- More efficient database recorder with incompatible APIs.
+- Some bug fixes, performance improvements and more Python API.
 
 #### From v0.4 to v1.0
 

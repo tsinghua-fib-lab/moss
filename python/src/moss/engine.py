@@ -15,7 +15,7 @@ from pycityproto.city.person.v2.person_pb2 import Persons
 
 from .convert import pb2dict
 
-__all__ = ["Engine", "TlPolicy", "Verbosity", "PersonStatus"]
+__all__ = ["Engine", "TlPolicy", "Verbosity", "SLEEP", "WALKING", "DRIVING", "FINISHED"]
 
 
 def _import():
@@ -44,11 +44,10 @@ class Verbosity(Enum):
     ALL = 2
 
 
-class PersonStatus(Enum):
-    SLEEP = 0
-    WALKING = 1
-    DRIVING = 2
-    FINISHED = 3
+SLEEP = 0
+WALKING = 1
+DRIVING = 2
+FINISHED = 3
 
 
 class Engine:
@@ -79,7 +78,6 @@ class Engine:
         out_xmax: float = 1e999,
         out_ymax: float = 1e999,
         device: int = 0,
-        device_mem: float = 0,
     ):
         """
         Args:
@@ -100,7 +98,6 @@ class Engine:
         - out_xmax: The maximum x coordinate of the output bounding box
         - out_ymax: The maximum y coordinate of the output bounding box
         - device: The CUDA device index
-        - device_mem: The memory limit of the CUDA device (unit: GiB). Set to `0` to use the self-adaptive mode (80% of the free GPU memory).
         """
 
         self._fetched_persons = None
@@ -137,7 +134,6 @@ class Engine:
             out_xmax,
             out_ymax,
             device,
-            device_mem,
         )
         self._map = Map()
         with open(map_file, "rb") as f:
@@ -191,6 +187,7 @@ class Engine:
         self._persons = Persons()
         with open(person_file, "rb") as f:
             self._persons.ParseFromString(f.read())
+        self.id2persons = {person.id: person for person in self._persons.persons}
         self._map_bbox = (out_xmin, out_ymin, out_xmax, out_ymax)
         self.start_step = start_step
         """
@@ -693,6 +690,16 @@ class Engine:
             max_speeds = [max_speeds] * len(lane_indices)
         self._e.set_lane_max_speed_batch(lane_indices, max_speeds)
 
+    def set_vehicle_route(self, person_id: int, route: List[int]):
+        """
+        Set the route of vehicle `person_id`
+
+        Args:
+        - person_id: The id of the person (must be a vehicle)
+        - route: The route (road id list) of the vehicle
+        """
+        self._e.set_vehicle_route(person_id, route)
+
     def next_step(self, n=1):
         """
         Move forward `n` steps
@@ -700,3 +707,15 @@ class Engine:
         self._fetched_persons = None
         self._fetched_lanes = None
         self._e.next_step(n)
+
+    def make_checkpoint(self) -> int:
+        """
+        Make a checkpoint of the current state of the simulator and return the checkpoint id
+        """
+        return self._e.make_checkpoint()
+
+    def restore_checkpoint(self, checkpoint_id: int):
+        """
+        Restore the state of the simulator to a previous checkpoint
+        """
+        self._e.restore_checkpoint(checkpoint_id)

@@ -6,8 +6,9 @@
 #include "utils/macro.h"
 
 template <class T>
-struct MArrayZeroT {
-  static T* New(MemManager* mem, uint size) { return mem->MArrayZero<T>(size); }
+struct MArrayT {
+  static T* New(MemManager* mem, uint size) { return mem->MArray<T>(size); }
+  static void Free(MemManager* mem, T* data) { mem->Free(data); }
 };
 
 // Array wrapper for easy unified memory management
@@ -21,6 +22,13 @@ class Arr {
   void New(MemManager* mem, uint size_) {
     size = size_;
     data = size_ ? Allocator::New(mem, size_) : nullptr;
+  }
+  void Free(MemManager* mem) {
+    if (size) {
+      Allocator::Free(mem, data);
+      size = 0;
+      data = nullptr;
+    }
   }
   __host__ __device__ void Fill(const T& value) const {
     for (int i = 0; i < size; ++i) {
@@ -59,6 +67,6 @@ class Arr {
 };
 
 template <class T>
-using MArrZ = Arr<T, MArrayZeroT<T>>;
+using MArr = Arr<T, MArrayT<T>>;
 
 #endif

@@ -26,8 +26,8 @@ class StepOutput {
   void Init(const std::string& output_dir, const std::string& name,
             const std::string& map_path,
             float tl_file_duration);
-  void Write(float t, const MArrZ<PersonOutput>& person_outputs,
-             const MArrZ<TlOutput>& tl_outputs);
+  void Write(float t, const MArr<PersonOutput>& person_outputs,
+             const MArr<TlOutput>& tl_outputs);
   void FlushTl();
   void Close();
 

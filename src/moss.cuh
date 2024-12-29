@@ -55,34 +55,48 @@ struct Config {
   float phase_pressure_coeff;
   // CUDA device ID
   uint device;
-  // 显存占用大小（单位GiB）
-  float device_mem;
 };
 
 class Moss {
  private:
-  StepOutput step_output;
-  uint64_t last_step_t;
+  // save / restore data structure
+  struct Checkpoint {
+    uint step;
+    int mem_save_id;
+  };
+
+  // static data that is not changed during the simulation
+
   int id;
 
+  // dynamic data that is changed during the simulation
+
+  StepOutput step_output;
+  uint64_t last_step_t;
+
+  // save / restore data
+  std::vector<Checkpoint> checkpoints;
+
  public:
+  // static data that is not changed during the simulation
+
   Config config;
   bool verbose;
-  float time;
-  uint step;
+  // the number of SMs on the GPU
+  int sm_count;
+  // for coordinate transformation
+  float map_west, map_east, map_south, map_north;
   // 在初始化各个对象时种子会自增
   // The seed will be incremented when initializing each object
   uint64_t seed;
-  // used for output related computation
-  bool enable_api_output;
 
-  // the number of SMs on the GPU
-  int sm_count;
+  // dynamic data that is changed during the simulation
+
+  float time;
+  uint step;
+
   // global memory pool
   MemManager* mem;
-
-  // for coordinate transformation
-  float map_west, map_east, map_south, map_north;
 
   // data containers
   aoi::Data aoi;
@@ -99,6 +113,12 @@ class Moss {
   void Step();
   // Stop the simulation
   void Stop();
+  // Close the simulator
+  void Close();
+  // Save the current state
+  int Save();
+  // Restore the state by id
+  void Restore(int checkpoint_id);
 };
 };  // namespace moss
 

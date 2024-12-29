@@ -2,7 +2,6 @@
 #include <cuda.h>
 #include <cassert>
 #include <stdexcept>
-#include "containers/vector.cuh"
 #include "entity/aoi/aoi.cuh"
 #include "entity/lane/lane.cuh"
 #include "entity/person/person.cuh"
@@ -223,6 +222,7 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
     case PersonStatus::WALKING: {
       assert(p.runtime.status == p.snapshot.status);
       assert(p.runtime.lane == p.snapshot.lane);
+      // printf("Person %d Walking\n", p.id);
       auto is_end = UpdatePedestrian(p, t, dt);
       if (is_end) {
         // go to the next trip
@@ -230,7 +230,9 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
         if (!has_next) {
           p.runtime.status = PersonStatus::FINISHED;
         }
+        // printf("Person %d Walking End - Go to is_end - next: %d\n", p.id, has_next);
       }
+      // printf("Person %d Walking End\n", p.id);
     } break;
     case PersonStatus::SLEEP: {
       if (t >= p.departure_time) {
@@ -334,7 +336,7 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
   BAD_PERSON:;
   }
 
-  M = S->mem->MValueZero<MData>();
+  M = S->mem->MValue<MData>();
   this->S = S;
   stream = NewStream();
   person_limit = min(person_limit, uint(pb_valid_persons.size()));
@@ -509,7 +511,7 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
                 }
                 auto& driving_route = pb.routes(0).driving();
                 t.route.is_veh = true;
-                t.route.veh = S->mem->MValueZero<VehicleRoute>();
+                t.route.veh = S->mem->MValue<VehicleRoute>();
                 t.route.veh->route.New(S->mem, driving_route.road_ids_size());
                 for (int i = 0; i < driving_route.road_ids_size(); ++i) {
                   t.route.veh->route[i] = S->road.At(driving_route.road_ids(i));
@@ -529,7 +531,7 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
                 }
                 auto& walking_route = pb.routes(0).walking();
                 t.route.is_veh = false;
-                t.route.ped = S->mem->MValueZero<PedestrianRoute>();
+                t.route.ped = S->mem->MValue<PedestrianRoute>();
                 t.route.ped->route.New(S->mem, walking_route.route_size());
                 for (int i = 0; i < walking_route.route_size(); ++i) {
                   auto& pb_seg = walking_route.route(i);

@@ -6,7 +6,6 @@
 #include <unordered_map>
 #include <vector>
 #include "containers/array.cuh"
-#include "containers/vector.cuh"
 #include "entity/junction/junction.cuh"
 #include "entity/lane/lane.cuh"
 #include "mem/mem.cuh"

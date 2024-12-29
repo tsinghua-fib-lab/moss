@@ -25,7 +25,7 @@ enum TlPolicy {
 struct Junction {
   uint id, index;
   // lanes in junction
-  MArrZ<Lane*> lanes;
+  MArr<Lane*> lanes;
   // traffic light
   trafficlight::MPTrafficLight tl;
   // traffic light policy
@@ -37,7 +37,7 @@ struct Junction {
 namespace junction {
 struct Data {
   // data array: index -> junction
-  MArrZ<Junction> junctions;
+  MArr<Junction> junctions;
   // data map: id -> junction
   std::unordered_map<uint, Junction*> junction_map;
   Moss* S;

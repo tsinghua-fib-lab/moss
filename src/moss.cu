@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -40,20 +41,7 @@ void Moss::Init(const std::string& name, const Config& config_) {
                                  config.device));
   Info("Using GPU ", config.device, " with ", sm_count, " SMs");
   // init memory pool
-  {
-    Tag _("Mem Init", 0);
-    size_t size;
-    if (config.device_mem <= 0) {
-      // 自动分配（按剩余显存的80%分配）
-      size_t free, total;
-      CUCHECK(cudaMemGetInfo(&free, &total));
-      size = size_t(free * 0.8);
-    } else {
-      size = size_t(config.device_mem * 1024 * 1024 * 1024);
-    }
-    Info("Using ", size / 1024 / 1024 / 1024, "GB memory");
-    mem = MemManager::New(size, config.device, verbose);
-  }
+  { mem = new MemManager{config.device, verbose}; }
   // init multi-thread
   if (config.n_workers == 0) {
     config.n_workers = get_nprocs();
@@ -141,7 +129,7 @@ void Moss::Step() {
   uint64_t t = Time();
   Tag _(fmt::format("Step: {}", step - config.start_step).c_str(), 7);
   Info("[", id, "] Step: ", step - config.start_step, " (", step, ") ",
-       fmt::format("{:.2f}", 1e6 / max(1, t - last_step_t)),
+       fmt::format("{:.2f}", 1e6 / max(1ul, t - last_step_t)),
        "Hz Sleep:", person.M->status_cnts[0],
        " Walk:", person.M->status_cnts[1], " Drive:", person.M->status_cnts[2],
        " Finished:", person.M->status_cnts[3]);
@@ -186,6 +174,29 @@ void Moss::Stop() {
   ++step;
   time = step * config.step_interval;
   step_output.Close();
+}
+
+void Moss::Close() {
+  delete mem;
+  Info("Memory pool released");
+  Info("Moss closed");
+}
+
+int Moss::Save() {
+  Checkpoint checkpoint;
+  checkpoint.step = step;
+  checkpoint.mem_save_id = mem->Save();
+  checkpoints.push_back(checkpoint);
+  return checkpoints.size() - 1;
+}
+
+void Moss::Restore(int id) {
+  if (id < 0 || id >= checkpoints.size()) {
+    Fatal("Restore: invalid snapshot id: ", id);
+  }
+  step = checkpoints[id].step;
+  time = step * config.step_interval;
+  mem->Restore(checkpoints[id].mem_save_id);
 }
 
 };  // namespace moss

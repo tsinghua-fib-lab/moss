@@ -6,7 +6,6 @@
 #include "city/routing/v2/routing_service.grpc.pb.h"
 #include "city/routing/v2/routing_service.pb.h"
 #include "containers/array.cuh"
-#include "containers/vector.cuh"
 #include "entity/lane/lane.cuh"
 #include "protos.h"
 
@@ -23,12 +22,12 @@ struct PedestrianRouteSegment {
 };
 struct PedestrianRoute {
   // INIT in Data::Init()
-  MArrZ<PedestrianRouteSegment> route;
+  MArr<PedestrianRouteSegment> route;
 };
 struct VehicleRoute {
   // the road segments of the route
   // INIT in Data::Init()
-  MArrZ<Road*> route;
+  MArr<Road*> route;
 };
 struct Route {
   // vehicle route or pedestrian route
