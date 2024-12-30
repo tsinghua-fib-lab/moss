@@ -8,7 +8,7 @@ yum install -y wget
 
 # Install Boost
 wget -O boost_1_86_0.tar.gz https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.gz
-tar -zxvf boost_1_86_0.tar.gz
+tar -zxf boost_1_86_0.tar.gz
 cd boost_1_86_0
 ./bootstrap.sh --with-libraries=filesystem,iostreams,program_options,regex,system --prefix=/usr/local  # avro dependency
 ./b2 install
