@@ -35,7 +35,7 @@ The related repositories of MOSS are as follows:
 
 - Linux
 - CUDA 11.8
-- Python >= 3.8
+- Python >= 3.9
 
 #### Install
 
@@ -91,7 +91,7 @@ If you are interested in the development of MOSS, you can follow the instruction
 - Linux
 - CUDA 11.8 or higher
 - CMake >= 3.18
-- Python >= 3.8
+- Python >= 3.9
 - Network that can access the GitHub repository
 
 #### Compile and Build
