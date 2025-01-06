@@ -530,7 +530,7 @@ class Engine:
         """
         persons = self.fetch_persons()
         status: NDArray[np.uint8] = persons["status"]
-        return (status == PersonStatus.FINISHED.value).sum()
+        return (status == FINISHED).sum()
 
     def get_finished_person_average_traveling_time(self) -> float:
         """
@@ -539,7 +539,7 @@ class Engine:
         persons = self.fetch_persons()
         status: NDArray[np.uint8] = persons["status"]
         traveling_time = persons["traveling_time"]
-        return traveling_time[status == PersonStatus.FINISHED.value].mean()
+        return traveling_time[FINISHED].mean()
 
     def get_running_person_average_traveling_time(self) -> float:
         """
@@ -557,7 +557,7 @@ class Engine:
         persons = self.fetch_persons()
         status: NDArray[np.uint8] = persons["status"]
         traveling_time = persons["traveling_time"]
-        return traveling_time[status != PersonStatus.SLEEP.value].mean()
+        return traveling_time[status != SLEEP].mean()
 
     def get_road_lane_plan_index(self, road_index: int) -> int:
         """
