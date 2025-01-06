@@ -188,6 +188,15 @@ class Engine:
         with open(person_file, "rb") as f:
             self._persons.ParseFromString(f.read())
         self.id2persons = {person.id: person for person in self._persons.persons}
+        # use map bbox as default if is set to inf
+        if out_xmin == -1e999:
+            out_xmin = self._map.header.west
+        if out_ymin == -1e999:
+            out_ymin = self._map.header.south
+        if out_xmax == 1e999:
+            out_xmax = self._map.header.east
+        if out_ymax == 1e999:
+            out_ymax = self._map.header.north
         self._map_bbox = (out_xmin, out_ymin, out_xmax, out_ymax)
         self.start_step = start_step
         """
