@@ -375,10 +375,7 @@ class Engine:
         """
         persons = self.fetch_persons()
         status: NDArray[np.uint8] = persons["status"]
-        return (
-            (status == PersonStatus.DRIVING.value)
-            | (status == PersonStatus.WALKING.value)
-        ).sum()
+        return ((status == DRIVING) | (status == WALKING)).sum()
 
     def get_lane_statuses(self) -> NDArray[np.int8]:
         """
@@ -402,7 +399,7 @@ class Engine:
         lane_id = persons["lane_id"]
         status = persons["status"]
         v = persons["v"]
-        filter = (status == PersonStatus.DRIVING.value) & (v < speed_threshold)
+        filter = (status == DRIVING) & (v < speed_threshold)
         filtered_lane_id = lane_id[filter]
         # count for the lane id
         unique, counts = np.unique(filtered_lane_id, return_counts=True)
@@ -424,7 +421,7 @@ class Engine:
         status = persons["status"]
         v = persons["v"]
         s = persons["s"]
-        filter = (status == PersonStatus.DRIVING.value) & (v < speed_threshold)
+        filter = (status == DRIVING) & (v < speed_threshold)
         filtered_lane_id = lane_id[filter]
         filtered_s = s[filter]
         # find the distance to the end of the lane
@@ -542,7 +539,7 @@ class Engine:
         persons = self.fetch_persons()
         status: NDArray[np.uint8] = persons["status"]
         traveling_time = persons["traveling_time"]
-        return traveling_time[status == PersonStatus.DRIVING.value].mean()
+        return traveling_time[status == DRIVING].mean()
 
     def get_departed_person_average_traveling_time(self) -> float:
         """
@@ -569,7 +566,7 @@ class Engine:
         persons = self.fetch_persons()
         road_id = persons["lane_parent_id"]
         status = persons["status"]
-        filter = status == PersonStatus.DRIVING.value
+        filter = status == DRIVING
         filtered_road_id = road_id[filter]
         # count for the road id
         unique, counts = np.unique(filtered_road_id, return_counts=True)
@@ -590,7 +587,7 @@ class Engine:
         status = persons["status"]
         v = persons["v"]
         filter = (
-            (status == PersonStatus.DRIVING.value)
+            (status == DRIVING)
             & (v < speed_threshold)
             & (road_id < 3_0000_0000)  # the road id ranges [2_0000_0000, 3_0000_0000)
         )
