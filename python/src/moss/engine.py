@@ -289,6 +289,7 @@ class Engine:
 
         The result values is a dictionary with the following keys:
         - id: The id of the person
+        - enable: Whether the person is enabled
         - status: The status of the person
         - lane_id: The id of the lane the person is on
         - lane_parent_id: The id of the road the lane belongs to
@@ -314,6 +315,7 @@ class Engine:
         if self._fetched_persons is None:
             (
                 ids,
+                enables,
                 statuses,
                 lane_ids,
                 lane_parent_ids,
@@ -336,6 +338,7 @@ class Engine:
             ) = self._e.fetch_persons()
             self._fetched_persons = {
                 "id": ids,
+                "enable": enables,
                 "status": statuses,
                 "lane_id": lane_ids,
                 "lane_parent_id": lane_parent_ids,
@@ -604,6 +607,36 @@ class Engine:
         # count for the road id
         unique, counts = np.unique(filtered_road_id, return_counts=True)
         return dict(zip(unique, counts))
+
+    def set_person_enable(self, person_index: int, enable: bool):
+        """
+        Enable or disable person `person_index`
+
+        Args:
+        - person_index: The index of the person
+        - enable: Whether to enable the person
+        """
+        self._e.set_person_enable(person_index, enable)
+
+    def set_person_enable_batch(
+        self, person_indices: List[int], enable: Union[bool, List[bool]]
+    ):
+        """
+        Enable or disable person in `person_indices`
+
+        Args:
+        - person_indices: The indices of the persons
+        - enable: Whether to enable the persons, can be a boolean or a list of booleans
+        """
+        enable = [enable] * len(person_indices) if isinstance(enable, bool) else enable
+        if len(person_indices) != len(enable):
+            raise ValueError(
+                "The length of person_indices and enable should be the same"
+            )
+        self._e.set_person_enable_batch(
+            person_indices,
+            enable,
+        )
 
     def set_tl_policy(self, junction_index: int, policy: TlPolicy):
         """

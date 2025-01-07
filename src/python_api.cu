@@ -70,9 +70,13 @@ class Engine {
     };
     S.Init(name, config);
   }
+
   // 获取当前步
+  // Get the current step
   int get_current_step() { return S.step; }
+
   // 获取当前时间
+  // Get the current time
   float get_current_time() { return S.time; }
 
   // get persons' all information as numpy arrays
@@ -80,6 +84,7 @@ class Engine {
     Info("Call fetch_persons");
     // define
     auto* ids = new vec<int>();
+    auto* enable = new vec<int8_t>();
     auto* statuses = new vec<int>();
     auto* lane_ids = new vec<int>();
     auto* lane_parent_ids = new vec<int>();
@@ -101,6 +106,7 @@ class Engine {
     auto* total_distances = new vec<float>();
     // reserve space
     ids->reserve(S.person.persons.size);
+    enable->reserve(S.person.persons.size);
     statuses->reserve(S.person.persons.size);
     lane_ids->reserve(S.person.persons.size);
     lane_parent_ids->reserve(S.person.persons.size);
@@ -124,6 +130,7 @@ class Engine {
     // copy
     for (auto& p : S.person.persons) {
       ids->push_back(int(p.id));
+      enable->push_back(int8_t(p.enable));
       statuses->push_back(int(p.runtime.status));
       if (p.runtime.lane) {
         lane_ids->push_back(p.runtime.lane->id);
@@ -156,7 +163,7 @@ class Engine {
     }
 
     return std::make_tuple(
-        asarray(ids), asarray(statuses), asarray(lane_ids),
+        asarray(ids), asarray(enable), asarray(statuses), asarray(lane_ids),
         asarray(lane_parent_ids), asarray(ss), asarray(aoi_ids), asarray(vs),
         asarray(shadow_lane_ids), asarray(shadow_ss), asarray(lc_yaws),
         asarray(lc_completed_ratios), asarray(is_forwards), asarray(xs),
@@ -247,7 +254,9 @@ class Engine {
     }
     return out;
   }
+
   // 获取路口的当前相位id
+  // Get the current phase id of the junction
   auto get_junction_phase_ids() {
     auto* out = new vec<int>();
     out->reserve(S.junction.junctions.size);
@@ -256,7 +265,9 @@ class Engine {
     }
     return asarray(out);
   }
+
   // 获取路口的相位数
+  // Get the number of phases of the junction
   auto get_junction_phase_counts() {
     auto* out = new vec<int>();
     out->reserve(S.junction.junctions.size);
@@ -265,7 +276,9 @@ class Engine {
     }
     return asarray(out);
   }
+
   // 获取与路口相连的动态道路index
+  // Get the dynamic road index connected to the junction
   auto get_junction_dynamic_roads() {
     vec<vec<int>> out(S.junction.junctions.size);
     for (auto& r : S.road.roads) {
@@ -275,7 +288,9 @@ class Engine {
     }
     return out;
   }
+
   // 获取动态道路的车道方案
+  // Get the lane plan of the dynamic road
   auto get_road_lane_plans(uint road_index) {
     if (road_index >= S.road.roads.size) {
       throw std::out_of_range("road index out of range.");
@@ -293,7 +308,9 @@ class Engine {
     }
     return out;
   }
+
   // 获取动态道路的当前车道方案id
+  // Get the current lane plan id of the dynamic road
   int get_road_lane_plan_index(int road_index) {
     if (road_index >= S.road.roads.size) {
       throw std::out_of_range("Road index out of range.");
@@ -332,6 +349,7 @@ class Engine {
     }
     return std::make_tuple(out, asarray(xs), asarray(ys));
   }
+
   // 获取用于输出的信号灯信息
   // get traffic light information for output ([(id, state), ...], [x, ...], [y,
   // ...])
@@ -349,6 +367,7 @@ class Engine {
     }
     return std::make_tuple(out, asarray(xs), asarray(ys));
   }
+
   // 获取用于输出的路况信息
   // get lane information for output [(id, level, v), ...]
   auto get_output_roads() {
@@ -359,7 +378,24 @@ class Engine {
     }
     return out;
   }
-  // 设置信控模式
+
+  // set person enable
+  void set_person_enable(uint person_index, bool enable) {
+    if (person_index >= S.person.persons.size) {
+      throw std::out_of_range("Person index out of range.");
+    }
+    S.person.persons[person_index].enable = enable;
+  }
+
+  // set person enable in batch
+  void set_person_enable_batch(const std::vector<uint>& person_indices,
+                               const std::vector<bool>& enable) {
+    for (int i = 0, s = person_indices.size(); i < s; ++i) {
+      set_person_enable(person_indices[i], enable[i]);
+    }
+  }
+
+  // set traffic light policy
   void set_tl_policy(uint junction_index, uint policy) {
     if (junction_index >= S.junction.junctions.size) {
       throw std::out_of_range("Junction index out of range.");
@@ -369,26 +405,32 @@ class Engine {
     }
     S.junction.junctions[junction_index].tl_policy = (TlPolicy)policy;
   }
+
+  // set traffic light policy in batch
   void set_tl_policy_batch(const std::vector<uint>& junction_indices,
                            uint policy) {
     for (auto& i : junction_indices) {
       set_tl_policy(i, policy);
     }
   }
-  // 设置信控时长
+
+  // set traffic light duration
   void set_tl_duration(uint junction_index, int duration) {
     if (junction_index >= S.junction.junctions.size) {
       throw std::out_of_range("Junction index out of range.");
     }
     S.junction.junctions[junction_index].phase_time = duration;
   }
+
+  // set traffic light duration in batch
   void set_tl_duration_batch(const std::vector<uint>& junction_indices,
                              uint policy) {
     for (auto& i : junction_indices) {
       set_tl_duration(i, policy);
     }
   }
-  // 设置信控相位
+
+  // set traffic light phase
   void set_tl_phase(uint junction_index, uint phase_index) {
     if (junction_index >= S.junction.junctions.size) {
       throw std::out_of_range("Junction index out of range.");
@@ -400,38 +442,47 @@ class Engine {
     jc.tl.next_index = phase_index;
     jc.tl.set_force = true;
   }
+
+  // set traffic light phase in batch
   void set_tl_phase_batch(const std::vector<uint>& junction_indices,
                           const std::vector<uint>& phase_indices) {
     for (int i = 0, s = junction_indices.size(); i < s; ++i) {
       set_tl_phase(junction_indices[i], phase_indices[i]);
     }
   }
-  // 设置车道禁行
+
+  // set lane restriction
   void set_lane_restriction(uint lane_index, bool flag) {
     if (lane_index >= S.lane.lanes.size) {
       throw std::out_of_range("Lane index out of range.");
     }
     S.lane.lanes[lane_index].restriction = flag;
   }
+
+  // set lane restriction in batch
   void set_lane_restriction_batch(const std::vector<uint>& lane_indices,
                                   const std::vector<bool>& flags) {
     for (int i = 0, s = lane_indices.size(); i < s; ++i) {
       set_lane_restriction(lane_indices[i], flags[i]);
     }
   }
-  // 设置车道限速
+
+  // set lane max speed
   void set_lane_max_speed(uint lane_index, float max_speed) {
     if (lane_index >= S.lane.lanes.size) {
       throw std::out_of_range("Lane index out of range.");
     }
     S.lane.lanes[lane_index].max_speed = max_speed;
   }
+
+  // set lane max speed in batch
   void set_lane_max_speed_batch(const std::vector<uint>& lane_indices,
                                 const std::vector<float>& max_speeds) {
     for (int i = 0, s = lane_indices.size(); i < s; ++i) {
       set_lane_max_speed(lane_indices[i], max_speeds[i]);
     }
   }
+
   // 设置动态道路的车道方案
   // set road lane plan
   void set_road_lane_plan(uint road_index, uint plan_index) {
@@ -446,17 +497,20 @@ class Engine {
     r.nrl_a = r.nrl_ranges[plan_index];
     r.nrl_b = r.nrl_ranges[plan_index + 1];
   }
+
   void set_road_lane_plan_batch(const std::vector<uint>& road_indices,
                                 const std::vector<uint>& plan_indices) {
     for (int i = 0, s = road_indices.size(); i < s; ++i) {
       set_road_lane_plan(road_indices[i], plan_indices[i]);
     }
   }
+
   // set vehicle route, route is a list of road ids
   void set_vehicle_route(uint person_id, const std::vector<uint>& route) {
     auto p = S.person.At(person_id);
     p->SetVehicleRoute(&S, route);
   }
+
   void next_step(uint n) {
     // // 中间的步骤就没有必要更新输出，节省时间
     for (int i = 1; i < n; ++i) {
@@ -466,7 +520,9 @@ class Engine {
       S.Step();
     }
   }
+
   int save() { return S.Save(); }
+
   void restore(int checkpoint_id) { S.Restore(checkpoint_id); }
 };
 
@@ -509,6 +565,10 @@ PYBIND11_MODULE(_moss, m) {
       .def("get_output_persons", &Engine::get_output_persons, no_gil())
       .def("get_output_tls", &Engine::get_output_tls, no_gil())
       .def("get_output_roads", &Engine::get_output_roads, no_gil())
+      .def("set_person_enable", &Engine::set_person_enable, "person_index"_a,
+           "enable"_a, no_gil())
+      .def("set_person_enable_batch", &Engine::set_person_enable_batch,
+           "person_indices"_a, "enable"_a, no_gil())
       .def("set_lane_restriction", &Engine::set_lane_restriction,
            "lane_index"_a, "flag"_a, no_gil())
       .def("set_lane_restriction_batch", &Engine::set_lane_restriction_batch,
