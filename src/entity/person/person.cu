@@ -230,7 +230,8 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
         if (!has_next) {
           p.runtime.status = PersonStatus::FINISHED;
         }
-        // printf("Person %d Walking End - Go to is_end - next: %d\n", p.id, has_next);
+        // printf("Person %d Walking End - Go to is_end - next: %d\n", p.id,
+        // has_next);
       }
       // printf("Person %d Walking End\n", p.id);
     } break;
@@ -365,63 +366,75 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
     p.shadow_node.remove_node.next = nullptr;
     // init attribute
     if (!pb.has_vehicle_attribute()) {
-      Fatal("Error: person ", p.id, " has no vehicle attribute");
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has no vehicle attribute");
     }
     auto& veh_attr = pb.vehicle_attribute();
     p.veh_attr.length = veh_attr.length();
     if (p.veh_attr.length <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive length ",
-            p.veh_attr.length);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive length " +
+                               std::to_string(p.veh_attr.length));
     }
     p.veh_attr.width = veh_attr.width();
     if (p.veh_attr.width <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive width ",
-            p.veh_attr.width);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive width " +
+                               std::to_string(p.veh_attr.width));
     }
     p.veh_attr.max_v = veh_attr.max_speed();
     if (p.veh_attr.max_v <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive max speed ",
-            p.veh_attr.max_v);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive max speed " +
+                               std::to_string(p.veh_attr.max_v));
     }
     p.veh_attr.max_a = veh_attr.max_acceleration();
     if (p.veh_attr.max_a <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive max acceleration ",
-            p.veh_attr.max_a);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive max acceleration " +
+                               std::to_string(p.veh_attr.max_a));
     }
     p.veh_attr.max_braking_a = veh_attr.max_braking_acceleration();
     if (p.veh_attr.max_braking_a >= 0) {
-      Fatal("Error: person ", p.id, " has positive max braking acceleration ",
-            p.veh_attr.max_braking_a);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has positive max braking acceleration " +
+                               std::to_string(p.veh_attr.max_braking_a));
     }
     p.veh_attr.usual_a = veh_attr.usual_acceleration();
     if (p.veh_attr.usual_a <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive usual acceleration ",
-            p.veh_attr.usual_a);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive usual acceleration " +
+                               std::to_string(p.veh_attr.usual_a));
     }
     p.veh_attr.usual_braking_a = veh_attr.usual_braking_acceleration();
     if (p.veh_attr.usual_braking_a >= 0) {
-      Fatal("Error: person ", p.id, " has positive usual braking acceleration ",
-            p.veh_attr.usual_braking_a);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has positive usual braking acceleration " +
+                               std::to_string(p.veh_attr.usual_braking_a));
     }
     p.veh_attr.lane_change_length = pb.vehicle_attribute().lane_change_length();
     if (p.veh_attr.lane_change_length <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive lane change length ",
-            p.veh_attr.lane_change_length);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive lane change length " +
+                               std::to_string(p.veh_attr.lane_change_length));
     }
     p.veh_attr.min_gap = pb.vehicle_attribute().min_gap();
     if (p.veh_attr.min_gap <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive min gap ",
-            p.veh_attr.min_gap);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive min gap " +
+                               std::to_string(p.veh_attr.min_gap));
     }
     p.veh_attr.headway = veh_attr.headway();
     if (p.veh_attr.headway <= 0) {
-      Fatal("Error: person ", p.id, " has non-positive headway ",
-            p.veh_attr.headway);
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive headway " +
+                               std::to_string(p.veh_attr.headway));
     }
     p.veh_attr.lane_max_v_deviation =
         veh_attr.lane_max_speed_recognition_deviation();
     if (!pb.has_pedestrian_attribute()) {
-      Fatal("Error: person ", p.id, " has no pedestrian attribute");
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has no pedestrian attribute");
     }
     auto& ped_attr = pb.pedestrian_attribute();
     p.ped_attr.v = ped_attr.speed();
@@ -437,7 +450,8 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
       p.runtime.lane = S->lane.At(pb.home().lane_position().lane_id());
       p.runtime.s = pb.home().lane_position().s();
     } else {
-      Fatal("Error: person ", p.id, " has no home position");
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has no home position");
     }
 
     // init schedule
@@ -448,11 +462,12 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
       for (auto& pb : pb.schedules()) {
         auto& s = p.schedules[s_index++];
         if (pb.loop_count() != 1) {
-          Fatal(
-              "Error: moss does not support loop_count != 1, because all route "
-              "should be pre-computed. But it can not put current pre-computed "
-              "route for loop_count != 1 status. Person id: ",
-              p.id, " will be ignored");
+          throw std::runtime_error(
+              "Error: moss does not support loop_count != "
+              "1, because all route should be pre-computed. "
+              "But it can not put current pre-computed route "
+              "for loop_count != 1 status. Person id: " +
+              std::to_string(p.id) + " will be ignored");
         }
         if (pb.has_wait_time()) {
           s.wait = pb.wait_time();
@@ -495,19 +510,22 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
             }
             // copy route
             if (pb.routes_size() == 0) {
-              Fatal("Error: person ", p.id, " has no routes for schedule ",
-                    s_index, " trip ", t_index,
-                    ". Please use mosstool.trip.route.pre_route or "
-                    "mosstool.trip.gmns.STA to pre-compute the route.");
+              throw std::runtime_error(
+                  "Error: person " + std::to_string(p.id) +
+                  " has no routes for schedule " + std::to_string(s_index) +
+                  " trip " + std::to_string(t_index) +
+                  ". Please use mosstool.trip.route.pre_route or "
+                  "mosstool.trip.gmns.STA to pre-compute the route.");
             }
             switch (t.mode) {
               case TripMode::TRIP_MODE_DRIVE_ONLY: {
                 if (!pb.routes(0).has_driving() ||
                     pb.routes(0).driving().road_ids_size() == 0) {
-                  Fatal("Error: person ", p.id,
-                        " has no driving route for "
-                        "schedule ",
-                        s_index, " trip ", t_index);
+                  throw std::runtime_error(
+                      "Error: person " + std::to_string(p.id) +
+                      " has no driving route for schedule " +
+                      std::to_string(s_index) + " trip " +
+                      std::to_string(t_index));
                 }
                 auto& driving_route = pb.routes(0).driving();
                 t.route.is_veh = true;
@@ -524,10 +542,11 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
               case TripMode::TRIP_MODE_WALK_ONLY: {
                 if (!pb.routes(0).has_walking() ||
                     pb.routes(0).walking().route_size() == 0) {
-                  Fatal("Error: person ", p.id,
-                        " has no walking route for "
-                        "schedule ",
-                        s_index, " trip ", t_index);
+                  throw std::runtime_error(
+                      "Error: person " + std::to_string(p.id) +
+                      " has no walking route for schedule " +
+                      std::to_string(s_index) + " trip " +
+                      std::to_string(t_index));
                 }
                 auto& walking_route = pb.routes(0).walking();
                 t.route.is_veh = false;
@@ -545,7 +564,9 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
                 }
               } break;
               default: {
-                Fatal("Error: unknown trip mode: ", t.mode);
+                throw std::runtime_error(
+                    "Error: person " + std::to_string(p.id) +
+                    " has unknown trip mode: " + std::to_string(t.mode));
               } break;
             }
           }
@@ -562,7 +583,8 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
       } else if (s.wait >= 0) {
         p.departure_time = S->time + s.wait;
       } else {
-        Fatal("Error: person ", p.id, " has no departure time");
+        throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                                 " has no departure time");
       }
       if (p.NextTrip(S->time)) {
         earliest_departure = min(earliest_departure, p.departure_time);

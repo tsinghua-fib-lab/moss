@@ -4,8 +4,6 @@
 
 enum ErrorType {
   ANY,
-  LANE_VEH_ADD_BUFFER_FULL,
-  LANE_VEH_REMOVE_BUFFER_FULL,
 };
 
 __host__ __device__ void SetError(uint64_t error);

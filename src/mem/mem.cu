@@ -92,7 +92,7 @@ void* MemManager::allocate(size_t size) {
     void* ptr;
     CUCHECK(cudaMallocManaged(&ptr, alloc_size));
     if (!ptr) {
-      Fatal("cudaMallocManaged failed");
+      throw std::runtime_error("cudaMallocManaged failed");
       return nullptr;  // allocation failed
     }
     raw_ptrs.emplace_back(ptr, alloc_size);
@@ -213,7 +213,7 @@ void MemManager::Restore(int id) {
   std::lock_guard<std::mutex> lock(mtx);
 
   if (id < 0 || id >= checkpoints.size()) {
-    Fatal("Restore: invalid checkpoint id: ", id);
+    throw std::runtime_error("Restore: invalid checkpoint id: " + std::to_string(id));
   }
   // copy data back to device
   for (size_t i = 0; i < checkpoints[id].data.size(); i++) {

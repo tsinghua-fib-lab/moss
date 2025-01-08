@@ -66,19 +66,19 @@ void Moss::Init(const std::string& name, const Config& config_) {
     std::fstream file;
     file.open(config.map_file, std::ios::in | std::ios::binary);
     if (!file) {
-      Fatal("Cannot open file: ", config.map_file);
+      throw std::runtime_error("Cannot open file: " + config.map_file);
     }
     if (!map.ParseFromIstream(&file)) {
-      Fatal("Failed to parse map file.");
+      throw std::runtime_error("Failed to parse map file.");
     }
     file.close();
     Info("Reading persons...");
     file.open(config.person_file, std::ios::in | std::ios::binary);
     if (!file) {
-      Fatal("Cannot open file: ", config.person_file);
+      throw std::runtime_error("Cannot open file: " + config.person_file);
     }
     if (!persons.ParseFromIstream(&file)) {
-      Fatal("Failed to parse agent file.");
+      throw std::runtime_error("Failed to parse person file.");
     }
     file.close();
     map_west = map.header().west();
@@ -192,7 +192,7 @@ int Moss::Save() {
 
 void Moss::Restore(int id) {
   if (id < 0 || id >= checkpoints.size()) {
-    Fatal("Restore: invalid snapshot id: ", id);
+    throw std::runtime_error("Restore: invalid snapshot id: " + std::to_string(id));
   }
   step = checkpoints[id].step;
   time = step * config.step_interval;
