@@ -80,7 +80,77 @@ class Engine {
   float get_current_time() { return S.time; }
 
   // get persons' all information as numpy arrays
-  auto fetch_persons() {
+  auto fetch_persons(const std::vector<std::string>& fields) {
+    // fields flag
+    bool fetch_id = false;
+    bool fetch_enable = false;
+    bool fetch_status = false;
+    bool fetch_lane_id = false;
+    bool fetch_lane_parent_id = false;
+    bool fetch_s = false;
+    bool fetch_aoi_id = false;
+    bool fetch_v = false;
+    bool fetch_shadow_lane_id = false;
+    bool fetch_shadow_s = false;
+    bool fetch_lc_yaw = false;
+    bool fetch_lc_completed_ratio = false;
+    bool fetch_is_forward = false;
+    bool fetch_x = false;
+    bool fetch_y = false;
+    bool fetch_dir = false;
+    bool fetch_schedule_index = false;
+    bool fetch_trip_index = false;
+    bool fetch_departure_time = false;
+    bool fetch_traveling_time = false;
+    bool fetch_total_distance = false;
+    for (auto& f : fields) {
+      if (f == "id") {
+        fetch_id = true;
+      } else if (f == "enable") {
+        fetch_enable = true;
+      } else if (f == "status") {
+        fetch_status = true;
+      } else if (f == "lane_id") {
+        fetch_lane_id = true;
+      } else if (f == "lane_parent_id") {
+        fetch_lane_parent_id = true;
+      } else if (f == "s") {
+        fetch_s = true;
+      } else if (f == "aoi_id") {
+        fetch_aoi_id = true;
+      } else if (f == "v") {
+        fetch_v = true;
+      } else if (f == "shadow_lane_id") {
+        fetch_shadow_lane_id = true;
+      } else if (f == "shadow_s") {
+        fetch_shadow_s = true;
+      } else if (f == "lc_yaw") {
+        fetch_lc_yaw = true;
+      } else if (f == "lc_completed_ratio") {
+        fetch_lc_completed_ratio = true;
+      } else if (f == "is_forward") {
+        fetch_is_forward = true;
+      } else if (f == "x") {
+        fetch_x = true;
+      } else if (f == "y") {
+        fetch_y = true;
+      } else if (f == "dir") {
+        fetch_dir = true;
+      } else if (f == "schedule_index") {
+        fetch_schedule_index = true;
+      } else if (f == "trip_index") {
+        fetch_trip_index = true;
+      } else if (f == "departure_time") {
+        fetch_departure_time = true;
+      } else if (f == "traveling_time") {
+        fetch_traveling_time = true;
+      } else if (f == "total_distance") {
+        fetch_total_distance = true;
+      } else {
+        throw std::invalid_argument("Invalid field name: " + f);
+      }
+    }
+
     Info("Call fetch_persons");
     // define
     auto* ids = new vec<int>();
@@ -129,37 +199,83 @@ class Engine {
     Info("Call fetch_persons: reserve space");
     // copy
     for (auto& p : S.person.persons) {
-      ids->push_back(int(p.id));
-      enable->push_back(int8_t(p.enable));
-      statuses->push_back(int(p.runtime.status));
+      if (fetch_id) {
+        ids->push_back(int(p.id));
+      }
+      if (fetch_enable) {
+        enable->push_back(int8_t(p.enable));
+      }
+      if (fetch_status) {
+        statuses->push_back(int(p.runtime.status));
+      }
       if (p.runtime.lane) {
-        lane_ids->push_back(p.runtime.lane->id);
-        if (p.runtime.lane->parent_is_road) {
-          lane_parent_ids->push_back(int(p.runtime.lane->parent_road->id));
-        } else {
-          lane_parent_ids->push_back(int(p.runtime.lane->parent_junction->id));
+        if (fetch_lane_id) {
+          lane_ids->push_back(p.runtime.lane->id);
+        }
+        if (fetch_lane_parent_id) {
+          if (p.runtime.lane->parent_is_road) {
+            lane_parent_ids->push_back(int(p.runtime.lane->parent_road->id));
+          } else {
+            lane_parent_ids->push_back(int(p.runtime.lane->parent_junction->id));
+          }
         }
       } else {
-        lane_ids->push_back(-1);
-        lane_parent_ids->push_back(-1);
+        if (fetch_lane_id) {
+          lane_ids->push_back(-1);
+        }
+        if (fetch_lane_parent_id) {
+          lane_parent_ids->push_back(-1);
+        }
       }
-      ss->push_back(p.runtime.s);
-      aoi_ids->push_back(p.runtime.aoi ? int(p.runtime.aoi->id) : -1);
-      vs->push_back(p.runtime.v);
-      shadow_lane_ids->push_back(
-          p.runtime.shadow_lane ? int(p.runtime.shadow_lane->id) : -1);
-      shadow_ss->push_back(p.runtime.shadow_s);
-      lc_yaws->push_back(p.runtime.lc_yaw);
-      lc_completed_ratios->push_back(p.runtime.lc_completed_ratio);
-      is_forwards->push_back(p.runtime.is_forward);
-      xs->push_back(p.runtime.x);
-      ys->push_back(p.runtime.y);
-      dirs->push_back(p.runtime.dir);
-      schedule_indexs->push_back(p.schedule_index);
-      trip_indexs->push_back(p.trip_index);
-      departure_times->push_back(p.departure_time);
-      traveling_times->push_back(p.traveling_time);
-      total_distances->push_back(p.total_distance);
+      if (fetch_s) {
+        ss->push_back(p.runtime.s);
+      }
+      if (fetch_aoi_id) {
+        aoi_ids->push_back(p.runtime.aoi ? int(p.runtime.aoi->id) : -1);
+      }
+      if (fetch_v) {
+        vs->push_back(p.runtime.v);
+      }
+      if (fetch_shadow_lane_id) {
+        shadow_lane_ids->push_back(
+            p.runtime.shadow_lane ? int(p.runtime.shadow_lane->id) : -1);
+      }
+      if (fetch_shadow_s) {
+        shadow_ss->push_back(p.runtime.shadow_s);
+      }
+      if (fetch_lc_yaw) {
+        lc_yaws->push_back(p.runtime.lc_yaw);
+      }
+      if (fetch_lc_completed_ratio) {
+        lc_completed_ratios->push_back(p.runtime.lc_completed_ratio);
+      }
+      if (fetch_is_forward) {
+        is_forwards->push_back(p.runtime.is_forward);
+      }
+      if (fetch_x) {
+        xs->push_back(p.runtime.x);
+      }
+      if (fetch_y) {
+        ys->push_back(p.runtime.y);
+      }
+      if (fetch_dir) {
+        dirs->push_back(p.runtime.dir);
+      }
+      if (fetch_schedule_index) {
+        schedule_indexs->push_back(p.schedule_index);
+      }
+      if (fetch_trip_index) {
+        trip_indexs->push_back(p.trip_index);
+      }
+      if (fetch_departure_time) {
+        departure_times->push_back(p.departure_time);
+      }
+      if (fetch_traveling_time) {
+        traveling_times->push_back(p.traveling_time);
+      }
+      if (fetch_total_distance) {
+        total_distances->push_back(p.total_distance);
+      }
     }
 
     return std::make_tuple(
