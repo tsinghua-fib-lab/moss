@@ -1,5 +1,6 @@
 # Custom
 _*
+outputs/
 *.log
 log/
 data/

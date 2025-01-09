@@ -58,7 +58,7 @@ target_link_libraries(moss
   PRIVATE argparse
   PRIVATE fmt
   PRIVATE yaml-cpp
-  PRIVATE avrocpp
+  PRIVATE avrocpp_s
 )
 target_compile_definitions(moss PRIVATE VERSION="build.${DATE}")
 
@@ -95,7 +95,7 @@ target_link_libraries(_moss
   PRIVATE cityproto
   PRIVATE CUDA::nvToolsExt
   PRIVATE fmt
-  PRIVATE avrocpp
+  PRIVATE avrocpp_s
 )
 target_compile_definitions(_moss PRIVATE VERSION="build.${DATE}")
 target_include_directories(_moss PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

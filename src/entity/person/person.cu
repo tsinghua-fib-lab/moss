@@ -151,7 +151,10 @@ __global__ void Prepare(Person* persons, PersonOutput* outputs, uint size,
     return;
   }
   auto& p = persons[id];
+  // write output
+  auto& o = outputs[id];
   if (!p.enable) {
+    o.status = -1;
     return;
   }
   switch (p.runtime.status) {
@@ -169,8 +172,6 @@ __global__ void Prepare(Person* persons, PersonOutput* outputs, uint size,
     } break;
   }
   p.snapshot = p.runtime;
-  // write output
-  auto& o = outputs[id];
   o.t = t;
   o.id = p.id;
   o.x = p.runtime.x;
@@ -180,6 +181,8 @@ __global__ void Prepare(Person* persons, PersonOutput* outputs, uint size,
     o.parent_id = p.runtime.aoi->id;
   } else if (p.runtime.lane) {
     o.parent_id = p.runtime.lane->id;
+  } else {
+    o.parent_id = -1;
   }
   o.direction = p.runtime.dir;
   o.status = int(p.runtime.status);

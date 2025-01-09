@@ -66,10 +66,10 @@ void StepOutput::Write(float t, const MArr<PersonOutput>& person_outputs,
                                                       _person_schema);
   for (const auto& person_output : person_outputs) {
     switch (person_output.status) {
-      case int(PersonStatus::DRIVING): {
+      case int32_t(PersonStatus::DRIVING): {
         veh_writer.write(person_output);
       } break;
-      case int(PersonStatus::WALKING): {
+      case int32_t(PersonStatus::WALKING): {
         ped_writer.write(person_output);
       } break;
       default:

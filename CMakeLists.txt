@@ -67,6 +67,7 @@ set(gRPC_BUILD_GRPC_PYTHON_PLUGIN OFF CACHE BOOL "")
 set(gRPC_BUILD_GRPC_RUBY_PLUGIN OFF CACHE BOOL "")
 FetchContent_MakeAvailable(fmt yaml-cpp argparse pybind11 cityproto)
 
+set(Boost_USE_STATIC_LIBS ON CACHE BOOL "")
 # the CMakelists.txt of avro is in the /lang/c++/ directory
 FetchContent_Declare(
   avro
