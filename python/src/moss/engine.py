@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple, Union
 from warnings import warn
 
 import numpy as np
+from numba import njit
 from numpy.typing import NDArray
 from pycityproto.city.map.v2.map_pb2 import Map
 from pycityproto.city.person.v2.person_pb2 import Persons
@@ -29,6 +30,40 @@ def _import():
 
 _moss = _import()
 _thread_local = threading.local()
+
+
+@njit
+def _populate_waiting_at_lane_end(
+    enable: np.ndarray,
+    status: np.ndarray,
+    lane_id: np.ndarray,
+    lane_length_array: np.ndarray,
+    v: np.ndarray,
+    s: np.ndarray,
+    speed_threshold: float,
+    distance_to_end: float,
+):
+    filter = (enable == 1) & (status == DRIVING) & (v < speed_threshold)
+    filtered_lane_id = lane_id[filter]
+    filtered_s = s[filter]
+    # find the distance to the end of the lane
+    lane_ids_for_count = []
+    for i, s in zip(filtered_lane_id, filtered_s):
+        if lane_length_array[i] - s < distance_to_end:
+            lane_ids_for_count.append(i)
+    return lane_ids_for_count
+
+
+@njit
+def _populate_waiting_at_lane(
+    enable: np.ndarray,
+    status: np.ndarray,
+    lane_id: np.ndarray,
+    v: np.ndarray,
+    speed_threshold: float,
+):
+    filter = (enable == 1) & (status == DRIVING) & (v < speed_threshold)
+    return lane_id[filter]
 
 
 class TlPolicy(Enum):
@@ -115,13 +150,15 @@ class Engine:
         The interval of speed statistics. Set to `0` to disable speed statistics.
         """
         # check parameters
-        
+
         if step_interval <= 0:
             raise ValueError("step_interval should be greater than 0")
         if step_interval > 1:
             warn("step_interval is greater than 1, the simulation may not be accurate")
         if person_limit < -1:
-            raise ValueError("person_limit should be greater than -1, -1 means no limit")
+            raise ValueError(
+                "person_limit should be greater than -1, -1 means no limit"
+            )
         if junction_yellow_time < 0:
             raise ValueError("junction_yellow_time should be greater than 0")
         if phase_pressure_coeff <= 0:
@@ -199,6 +236,12 @@ class Engine:
         self.road_id2index = {v.item(): k for k, v in enumerate(self.road_index2id)}
         """
         Dictionary of road index indexed by road id
+        """
+        self.lane_length_array = np.array(
+            [l.length for l in self._map.lanes], dtype=np.float32
+        )
+        """
+        Numpy array of lane length indexed by lane index
         """
 
         self._persons = Persons()
@@ -356,7 +399,11 @@ class Engine:
                 "traveling_time",
                 "total_distance",
             ]
-        has_fields = set() if self._fetched_persons is None else set(self._fetched_persons.keys())
+        has_fields = (
+            set()
+            if self._fetched_persons is None
+            else set(self._fetched_persons.keys())
+        )
         delta_fields = set(fields) - has_fields
         if len(delta_fields) > 0:
             (
@@ -437,7 +484,7 @@ class Engine:
         Get the total number of running persons (including driving and walking)
         """
         persons = self.fetch_persons(["enable", "status"])
-        enable = persons["enable"] # type: NDArray[np.uint8]
+        enable = persons["enable"]  # type: NDArray[np.uint8]
         status: NDArray[np.uint8] = persons["status"]
         return ((enable == 1) & ((status == DRIVING) | (status == WALKING))).sum()
 
@@ -464,8 +511,13 @@ class Engine:
         lane_id = persons["lane_id"]
         status = persons["status"]
         v = persons["v"]
-        filter = (enable == 1) & (status == DRIVING) & (v < speed_threshold)
-        filtered_lane_id = lane_id[filter]
+        filtered_lane_id = _populate_waiting_at_lane(
+            enable=enable,
+            status=status,
+            lane_id=lane_id,
+            v=v,
+            speed_threshold=speed_threshold,
+        )
         # count for the lane id
         unique, counts = np.unique(filtered_lane_id, return_counts=True)
         return unique, counts
@@ -486,14 +538,16 @@ class Engine:
         status = persons["status"]
         v = persons["v"]
         s = persons["s"]
-        filter = (enable == 1) & (status == DRIVING) & (v < speed_threshold)
-        filtered_lane_id = lane_id[filter]
-        filtered_s = s[filter]
-        # find the distance to the end of the lane
-        lane_ids_for_count = []
-        for i, s in zip(filtered_lane_id, filtered_s):
-            if self.id2lanes[i].length - s < distance_to_end:
-                lane_ids_for_count.append(i)
+        lane_ids_for_count = _populate_waiting_at_lane_end(
+            enable=enable,
+            status=status,
+            lane_id=lane_id,
+            lane_length_array=self.lane_length_array,
+            v=v,
+            s=s,
+            speed_threshold=speed_threshold,
+            distance_to_end=distance_to_end,
+        )
         # count for the lane id
         unique, counts = np.unique(lane_ids_for_count, return_counts=True)
         return unique, counts
@@ -639,7 +693,9 @@ class Engine:
         enable = persons["enable"]
         road_id = persons["lane_parent_id"]
         status = persons["status"]
-        filter = (enable == 1) & (status == DRIVING)
+        filter = (
+            (enable == 1) & (status == DRIVING) & (road_id < 3_0000_0000)
+        )  # the road id ranges [2_0000_0000, 3_0000_0000)
         filtered_road_id = road_id[filter]
         # count for the road id
         unique, counts = np.unique(filtered_road_id, return_counts=True)
