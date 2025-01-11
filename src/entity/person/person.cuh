@@ -321,7 +321,32 @@ struct MData {
 #endif
 };
 struct Data {
+  std::vector<int> ids;
+
   MArr<Person> persons;
+
+  // use columns to store the snapshot data
+  MArr<int8_t> s_enable;
+  MArr<int> s_status;
+  MArr<int> s_lane_id;
+  MArr<int> s_lane_parent_id;
+  MArr<float> s_s;
+  MArr<int> s_aoi_id;
+  MArr<float> s_v;
+  MArr<int> s_shadow_lane_id;
+  MArr<float> s_shadow_s;
+  MArr<float> s_lc_yaw;
+  MArr<float> s_lc_completed_ratio;
+  MArr<int8_t> s_is_forward;
+  MArr<float> s_x;
+  MArr<float> s_y;
+  MArr<float> s_dir;
+  MArr<int> s_schedule_index;
+  MArr<int> s_trip_index;
+  MArr<float> s_departure_time;
+  MArr<float> s_traveling_time;
+  MArr<float> s_total_distance;
+
   MArr<PersonOutput> outputs;
   std::map<uint, Person*> person_map;
   cudaStream_t stream;

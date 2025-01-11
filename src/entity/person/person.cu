@@ -172,6 +172,7 @@ __global__ void Prepare(Person* persons, PersonOutput* outputs, uint size,
     } break;
   }
   p.snapshot = p.runtime;
+
   o.t = t;
   o.id = p.id;
   o.x = p.runtime.x;
@@ -198,13 +199,22 @@ __global__ void Prepare(Person* persons, PersonOutput* outputs, uint size,
       p.node.sides[0][1] = nullptr;
 }
 
-__global__ void Update(Person* persons, uint size, float t, float dt,
+__global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
+                       int* s_lane_id, int* s_lane_parent_id, float* s_s,
+                       int* s_aoi_id, float* s_v, int* s_shadow_lane_id,
+                       float* s_shadow_s, float* s_lc_yaw,
+                       float* s_lc_completed_ratio, int8_t* s_is_forward,
+                       float* s_x, float* s_y, float* s_dir,
+                       int* s_schedule_index, int* s_trip_index,
+                       float* s_departure_time, float* s_traveling_time,
+                       float* s_total_distance, uint size, float t, float dt,
                        float X_MIN, float X_MAX, float Y_MIN, float Y_MAX) {
   uint index = THREAD_ID;
   if (index >= size) {
     return;
   }
   auto& p = persons[index];
+  s_enable[index] = int8_t(p.enable);
   if (!p.enable) {
     return;
   }
@@ -303,10 +313,42 @@ __global__ void Update(Person* persons, uint size, float t, float dt,
       }
     } break;
     default: {
-      return;
+      break;
     }
   }
   p.runtime.UpdatePositionDir();
+
+  // copy runtime to column storage
+
+  s_status[index] = int(p.runtime.status);
+  if (p.runtime.lane) {
+    s_lane_id[index] = int(p.runtime.lane->id);
+    if (p.runtime.lane->parent_road) {
+      s_lane_parent_id[index] = int(p.runtime.lane->parent_road->id);
+    } else {
+      s_lane_parent_id[index] = int(p.runtime.lane->parent_junction->id);
+    }
+  } else {
+    s_lane_id[index] = -1;
+    s_lane_parent_id[index] = -1;
+  }
+  s_s[index] = p.runtime.s;
+  s_aoi_id[index] = p.runtime.aoi ? int(p.runtime.aoi->id) : -1;
+  s_v[index] = p.runtime.v;
+  s_shadow_lane_id[index] =
+      p.runtime.shadow_lane ? int(p.runtime.shadow_lane->id) : -1;
+  s_shadow_s[index] = p.runtime.shadow_s;
+  s_lc_yaw[index] = p.runtime.lc_yaw;
+  s_lc_completed_ratio[index] = p.runtime.lc_completed_ratio;
+  s_is_forward[index] = int8_t(p.runtime.is_forward);
+  s_x[index] = p.runtime.x;
+  s_y[index] = p.runtime.y;
+  s_dir[index] = p.runtime.dir;
+  s_schedule_index[index] = p.schedule_index;
+  s_trip_index[index] = p.trip_index;
+  s_departure_time[index] = p.departure_time;
+  s_traveling_time[index] = p.traveling_time;
+  s_total_distance[index] = p.total_distance;
 }
 
 void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
@@ -345,6 +387,7 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
   stream = NewStream();
   person_limit = min(person_limit, uint(pb_valid_persons.size()));
   persons.New(S->mem, person_limit);
+  ids.reserve(person_limit);
   SetGridBlockSize(Prepare, persons.size, S->sm_count, g_prepare, b_prepare);
   SetGridBlockSize(Update, persons.size, S->sm_count, g_update, b_update);
   uint index = 0;
@@ -358,6 +401,7 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
     p.id = pb.id();
     p.enable = true;
     person_map[p.id] = &p;
+    ids.push_back(p.id);
     p.node.index = p.shadow_node.index = index - 1;
     p.node.add_node.data = &p.node;
     p.node.add_node.next = nullptr;
@@ -606,6 +650,27 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
   CHECK;
   Info("Earliest person departure: ", earliest_departure);
 
+  s_enable.New(S->mem, persons.size);
+  s_status.New(S->mem, persons.size);
+  s_lane_id.New(S->mem, persons.size);
+  s_lane_parent_id.New(S->mem, persons.size);
+  s_s.New(S->mem, persons.size);
+  s_aoi_id.New(S->mem, persons.size);
+  s_v.New(S->mem, persons.size);
+  s_shadow_lane_id.New(S->mem, persons.size);
+  s_shadow_s.New(S->mem, persons.size);
+  s_lc_yaw.New(S->mem, persons.size);
+  s_lc_completed_ratio.New(S->mem, persons.size);
+  s_is_forward.New(S->mem, persons.size);
+  s_x.New(S->mem, persons.size);
+  s_y.New(S->mem, persons.size);
+  s_dir.New(S->mem, persons.size);
+  s_schedule_index.New(S->mem, persons.size);
+  s_trip_index.New(S->mem, persons.size);
+  s_departure_time.New(S->mem, persons.size);
+  s_traveling_time.New(S->mem, persons.size);
+  s_total_distance.New(S->mem, persons.size);
+
   outputs.New(S->mem, persons.size);
 }
 
@@ -627,8 +692,14 @@ void Data::UpdateAsync() {
     return;
   }
   Update<<<g_update, b_update, 0, stream>>>(
-      persons.data, persons.size, S->time, S->config.step_interval,
-      S->config.x_min, S->config.x_max, S->config.y_min, S->config.y_max);
+      persons.data, s_enable.data, s_status.data, s_lane_id.data,
+      s_lane_parent_id.data, s_s.data, s_aoi_id.data, s_v.data,
+      s_shadow_lane_id.data, s_shadow_s.data, s_lc_yaw.data,
+      s_lc_completed_ratio.data, s_is_forward.data, s_x.data, s_y.data,
+      s_dir.data, s_schedule_index.data, s_trip_index.data,
+      s_departure_time.data, s_traveling_time.data, s_total_distance.data,
+      persons.size, S->time, S->config.step_interval, S->config.x_min,
+      S->config.x_max, S->config.y_min, S->config.y_max);
 }
 
 }  // namespace person
