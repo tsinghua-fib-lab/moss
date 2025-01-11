@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
@@ -6,6 +6,6 @@ echo "Running pre-commit hook"
 
 set -x
 
-make html
+LC_ALL=C.UTF-8 make html
 
 git add docs
