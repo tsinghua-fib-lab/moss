@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+echo "Running pre-commit hook"
+
+set -x
+
+make html
+
+git add docs
