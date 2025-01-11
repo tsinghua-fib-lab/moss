@@ -5,11 +5,7 @@
 
 A GPU-accelerated Large-scale Open Microscopic Traffic Simulation System
 
-Website: [https://moss.fiblab.net](https://moss.fiblab.net)
-
-Documentation: [https://moss.fiblab.net/docs/introduction](https://moss.fiblab.net/docs/introduction)
-
-API Reference: [https://docs.fiblab.net/moss](https://docs.fiblab.net/moss)
+Online Wizard Website: [https://moss.fiblab.net](https://moss.fiblab.net)
 
 ## Features
 
