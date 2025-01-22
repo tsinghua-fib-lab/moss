@@ -31,8 +31,12 @@ The related repositories of MOSS are as follows:
 ```{toctree}
 :maxdepth: 2
 
-1.get-started
-2.development
+01-core-concepts
+02-quick-start/index
+03-data-format/index
+04-move-from-sumo/index
+05-advanced-usage/index
+06.development
+07.version
 apidocs/index
-3.version
 ```
