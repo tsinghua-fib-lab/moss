@@ -18,7 +18,7 @@ wget -O boost_1_86_0.tar.gz https://archives.boost.io/release/1.86.0/source/boos
 tar -zxvf boost_1_86_0.tar.gz
 cd boost_1_86_0
 ./bootstrap.sh --with-libraries=filesystem,iostreams,program_options,regex,system --prefix=/usr/local  # avro dependency
-./b2 cxxflags=-fPIC install
+./b2 cxxflags="-fPIC -std=c++17" install  # C++17 to match moss
 cd ..
 rm -r boost_1_86_0
 rm boost_1_86_0.tar.gz
@@ -54,4 +54,6 @@ The config file is a YAML file that contains the simulation parameters. You can 
 pip install . -v
 ```
 
-1. You can submit a pull request to the repository to contribute to the project.
+:::{note}
+We are welcome to any contributions to the project. You can submit a pull request to the repository to contribute to the project.
+:::

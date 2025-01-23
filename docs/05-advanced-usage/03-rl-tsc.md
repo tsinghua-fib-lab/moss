@@ -1,4 +1,11 @@
 # Run TSC on MOSS
+
+:::{caution}
+The showcase is based on python-moss v0.2.0. A lot of changes have been made in the latest version.
+
+We are working on updating the showcase to the latest version.
+:::
+
 We provide examples for a classic traffic policy scenario: Traffic Signal Control.
 To run the examples provided in the `moss-opt-showcases` repository, you need to clone the repository and install the required dependencies.
 

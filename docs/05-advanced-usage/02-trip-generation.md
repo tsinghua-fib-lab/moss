@@ -12,33 +12,33 @@ This function returns a `Person` with fixed parameters each time it is called.
 
 ```python
 Person(
-        attribute=PersonAttribute(),
-        vehicle_attribute=VehicleAttribute(
-            length=5,
-            width=2,
-            max_speed=150 / 3.6,
-            max_acceleration=3,
-            max_braking_acceleration=-10,
-            usual_acceleration=2,
-            usual_braking_acceleration=-4.5,
-            headway=1.5,
-            lane_max_speed_recognition_deviation=1.0,
-            lane_change_length=10,
-            min_gap=1,
-            emission_attribute=EmissionAttribute(
-                weight=2100,
-                type=VehicleEngineType.VEHICLE_ENGINE_TYPE_FUEL,
-                coefficient_drag=0.251,
-                lambda_s=0.29,
-                frontal_area=2.52,
-                fuel_efficiency=VehicleEngineEfficiency(
-                    energy_conversion_efficiency=0.27 * 0.049
-                ),
+    attribute=PersonAttribute(),
+    vehicle_attribute=VehicleAttribute(
+        length=5,
+        width=2,
+        max_speed=150 / 3.6,
+        max_acceleration=3,
+        max_braking_acceleration=-10,
+        usual_acceleration=2,
+        usual_braking_acceleration=-4.5,
+        headway=1.5,
+        lane_max_speed_recognition_deviation=1.0,
+        lane_change_length=10,
+        min_gap=1,
+        emission_attribute=EmissionAttribute(
+            weight=2100,
+            type=VehicleEngineType.VEHICLE_ENGINE_TYPE_FUEL,
+            coefficient_drag=0.251,
+            lambda_s=0.29,
+            frontal_area=2.52,
+            fuel_efficiency=VehicleEngineEfficiency(
+                energy_conversion_efficiency=0.27 * 0.049
             ),
-            model="normal",
         ),
-        pedestrian_attribute=PedestrianAttribute(speed=1.34, model="normal"),
-        bike_attribute=BikeAttribute(speed=5, model="normal"),
+        model="normal",
+    ),
+    pedestrian_attribute=PedestrianAttribute(speed=1.34, model="normal"),
+    bike_attribute=BikeAttribute(speed=5, model="normal"),
 )
 
 ```
@@ -94,15 +94,15 @@ cg = CalibratedTemplateGenerator()
 
 `CalibratedTemplateGenerator.template_generator` returns a `Person` with [vehicle attributes](../04-trip-generation/01-format.md#vehicle) distributed according to the driving behavior parameters calibrated for Chinese drivers.
 
-## O-D Matrix Based Trip Generation
+## OD Matrix Based Trip Generation
 
-### O-D matrix generation
+### OD matrix generation
 
-We offer two methods for generating the O-D matrix: one is the classic gravity model, and the other is based on the Diffusion Model.
+We offer two methods for generating the OD matrix: one is the classic gravity model, and the other is based on the Diffusion Model.
 
 #### Gravity model
 
-##### Initialize the model and Generate the O-D matrix
+##### Initialize the model and Generate the OD matrix
 
 ```python
 import numpy as np
@@ -120,12 +120,12 @@ gravity_generator.load_area(area)
 od_matrix = gravity_generator.generate(pops)
 ```
 
-- `area` is `GeoDataFrame` data, containing the geometries that serve as the O-D regions.
+- `area` is `GeoDataFrame` data, containing the geometries that serve as the OD regions.
 - `pops` is a one-dimensional array containing the population numbers corresponding to each region in `area`.
 
 #### AIGC
 
-##### Initialize the model and Generate the O-D matrix
+##### Initialize the model and Generate the OD matrix
 
 ```python
 import geopandas as gpd
@@ -140,9 +140,9 @@ od_matrix = aigc_generator.generate()
 ```
 
 - Here we initialize the `aigc_generator` with specific `ACCESS_TOKEN`, which can be applied from [ArcGIS](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9).
-- `area` is `GeoDataFrame` data, containing the geometries that serve as the O-D regions.
+- `area` is `GeoDataFrame` data, containing the geometries that serve as the OD regions.
 
-### Generate trips with O-D matrix
+### Generate trips with OD matrix
 
 In this step we utilize `generator.TripGenerator` to generated `Persons` with assigned movements between elements in the map.
 

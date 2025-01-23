@@ -2,7 +2,11 @@
 
 ## Map
 
-In MOSS, a map serves as the foundational layout that represents the physical infrastructure of the road network and surrounding buildings. A map provides a spatial context within which vehicles can be simulated moving according to predefined rules and behaviors. 
+In MOSS, a map serves as the foundational layout that represents the physical infrastructure of the road network and surrounding buildings. A map provides a spatial context within which vehicles can be simulated moving according to predefined rules and behaviors.
+
+:::{tip}
+More details about the map format can be found in the [Data Format](./03-data-format/01-map-format.md) section.
+:::
 
 ### Road Network
 
@@ -30,13 +34,13 @@ In the figure below, the junction has four driving-in road (enclosed by the gree
 
 Buildings within a map describe non-road-network elements surrounding the road network, such as residential buildings in neighborhoods, shopping centers, etc. Buildings are categorized into AOI (Area of Interest) and POI (Point of Interest) based on whether they have an area or not.
 
-#### `AOI` (Area of Interest)
+#### `AOI`
 
 AOIs are the buildings on the roadside which have a specific connection relationship with lane. People/vehicles can travel back and forth between AOI and the road network, as the light brown polygons in the figure below.
 
 ![Aoi](img/sample_aoi_view.png)
 
-#### `POI` (Point of Interest)
+#### `POI`
 
 POI is specific locations that have some significance, it could be a landmark, business, or any other place that might be of interest to users. All POIs are contained in AOIs.
 
@@ -50,3 +54,7 @@ The basic unit of trips is (who, when, where, how).
 - "When" means the departure time of the trip.
 - "Where" means the destination of the trip.
 - "How" means the mode of the trip, including driving and walking now.
+
+:::{tip}
+More details about the trip format can be found in the [Data Format](./03-data-format/02-trip-format.md) section.
+:::

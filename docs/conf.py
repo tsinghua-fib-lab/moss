@@ -20,6 +20,7 @@ extensions = [
     "myst_parser",
     "autodoc2",
 ]
+myst_enable_extensions = ["colon_fence"]
 autodoc2_packages = [
     "../python/src/moss",
 ]
@@ -32,9 +33,10 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_title = "MOSS"
+html_title = ""
 html_theme = "furo"
 html_theme_options = {
+    "sidebar_hide_name": True,
     "top_of_page_buttons": ["view", "edit"],
     "source_repository": "https://github.com/tsinghua-fib-lab/moss/",
     "source_branch": "main",
@@ -53,3 +55,4 @@ html_theme_options = {
     ],
 }
 html_static_path = ["_static"]
+html_logo = "logo-with-text-transparent.png"

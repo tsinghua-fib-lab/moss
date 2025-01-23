@@ -15,7 +15,6 @@ e = Engine(
     person_file=TRIP_PATH,
     start_step=0,
     step_interval=1,
-    output_dir="output",  # AVRO output, local directory
     speed_stat_interval=300,  # open road status statistics
     verbose_level=Verbosity.ALL,
 )
@@ -24,14 +23,14 @@ recorder = DBRecorder(
     "postgres://user:password@url:port/simulation",
     "map_db.map_coll",  # map collection used for webui-backend
     "name",
-)  # used for PostgreSQL output
+)  # used for PostgreSQL output (optional)
 for _ in range(3600):
     e.next_step(1)
-    recorder.record()
+    recorder.record() # (optional)
     # YOU CAN DO SOMETHING HERE
     # persons = e.fetch_persons()
     # ...
-# save the simulation results to the database
+# save the simulation results to the database (optional)
 recorder.flush()
 ```
 - `map_file` and `person_file` are what we generated in Step `Build Map` and `Build Trip`.

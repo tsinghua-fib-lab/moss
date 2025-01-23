@@ -20,7 +20,7 @@ from mosstool.util.geo_match_pop import geo2pop
 
 aigc_generator = AigcGenerator()
 POP_TIF_PATH = "chn_ppp_2020_UNadj_constrained.tif"  # world pop data for china: "https://hub.worldpop.org/geodata/summary?id=49730"
-YOUR_ACCESS_TOKEN = "1"
+YOUR_ACCESS_TOKEN = "1" # any string is ok due to the free service
 
 with open("data/temp/map.pb", "rb") as f:
     m = Map()
@@ -35,7 +35,8 @@ area = geo2pop(gdf, POP_TIF_PATH, enable_tqdm=True)
 
 
 aigc_generator.set_satetoken(YOUR_ACCESS_TOKEN)
-area = gpd.read_file("data/gravitygenerator/Beijing-shp/beijing.shp")
+shp_path = "data/gravitygenerator/Beijing-shp/beijing.shp"
+area = gpd.read_file(shp_path)
 aigc_generator.load_area(area)
 od_matrix = aigc_generator.generate()
 
@@ -51,11 +52,12 @@ print(persons)
 ```
 
 - `agent_num` specifies the number of persons to be generated.
+- `shp_path` is the path of the shapefile of the area, which records the polygon of each region used to generate the OD matrix. (one region means one origin and one destination)
 
 ## Fill in the route of the persons' all schedules (Optional)
 
 This step requires extra packages released on [Releases · routing](https://github.com/tsinghua-fib-lab/routing/releases/).
-Activate the `routing` service before running codes below with `./routing -map data/temp/map.pb`.
+Activate the `routing` service before running codes below with `./routing -map data/temp/map.pb -listen localhost:52101`.
 ```python
 client = RoutingClient("http://localhost:52101")
 ok_persons = []
@@ -63,7 +65,6 @@ for p in persons:
     p = await pre_route(client, p)
     if len(p.schedules) > 0 and len(p.schedules[0].trips) > 0:
         ok_persons.append(p)
-print(ok_persons)
 print("final length: ", len(ok_persons))
 pb = Persons(persons=ok_persons)
 with open("data/temp/persons.pb", "wb") as f:
