@@ -620,7 +620,7 @@ PYBIND11_MODULE(_moss, m) {
                     const std::string&, float, float, float, float, uint>(),
            "name"_a, "map_file"_a, "person_file"_a, "start_step"_a,
            "step_interval"_a = 1, "seed"_a = 43, "verbose_level"_a = 0,
-           "person_limit"_a = -1, "junction_yellow_time"_a = 3,
+           "person_limit"_a = -1, "junction_yellow_time"_a = 0,
            "phase_pressure_coeff"_a = 1.5, "speed_stat_interval"_a = 0,
            "output_dir"_a = "", "out_xmin"_a = 0, "out_ymin"_a = 0,
            "out_xmax"_a = 0, "out_ymax"_a = 0, "device"_a = 0, no_gil())

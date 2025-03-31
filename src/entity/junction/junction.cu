@@ -80,8 +80,12 @@ void Data::Init(Moss* S, const PbMap& map) {
     // TODO: get phase from avaiable phases (pb.phases()) instead of fixed program
 
     // warning for confused traffic light setting
-    if (pb.phases_size() > 0 && !pb.has_fixed_program()) {
-      Warn("junction ", j.id, " has phases but no fixed program, in MOSS, we now use the phases in fixed program as the candidate phases for max pressure algorithm, please check the input data");
+    if (pb.phases_size() > 0) {
+      if (pb.has_fixed_program()) {
+        Warn("junction ", j.id, " has both phases and fixed program, in MOSS, we now use the phases in fixed program as the candidate phases for max pressure algorithm, please check the input data");
+      } else {
+        Warn("junction ", j.id, " has phases but no fixed program, in MOSS, we now use the phases in fixed program as the candidate phases for max pressure algorithm, please check the input data");
+      }
     }
 
     if (pb.has_fixed_program()) {
