@@ -1,5 +1,5 @@
 import io
-from typing import Iterator, Optional
+from typing import Dict, Iterator, Optional
 
 import psycopg
 import pyproj
@@ -50,9 +50,17 @@ class StringIteratorIO(io.TextIOBase):
 
 @ray.remote
 class _CopyWriter:
-    def __init__(self, dsn: str, proj_str: str):
+    def __init__(
+        self,
+        dsn: str,
+        proj_str: str,
+        carid2model: Dict[int, str],
+        pedid2model: Dict[int, str],
+    ):
         self._dsn = dsn
         self._proj = pyproj.Proj(proj_str)
+        self._carid2model = carid2model
+        self._pedid2model = pedid2model
 
     async def awrite(self, table_name: str, step, persons, tls, roads):
         # 1. reorganize the data
@@ -61,11 +69,37 @@ class _CopyWriter:
         cars = []
         peds = []
         for p, lng, lat in zip(person_info, lngs, lats):
-            id, status, parent_id, dir, v = p
+            id, status, parent_id, z, v, dir, pitch = p
             if status == 2:
-                cars.append([id, parent_id, dir, lng, lat, v])
+                cars.append(
+                    [
+                        id,
+                        parent_id,
+                        dir,
+                        lng,
+                        lat,
+                        z,
+                        v,
+                        dir,
+                        pitch,
+                        self._carid2model[id],
+                    ]
+                )
             elif status == 1:
-                peds.append([id, parent_id, dir, lng, lat, v])
+                peds.append(
+                    [
+                        id,
+                        parent_id,
+                        dir,
+                        lng,
+                        lat,
+                        z,
+                        v,
+                        dir,
+                        pitch,
+                        self._pedid2model[id],
+                    ]
+                )
         tls_out, xs, ys = tls
         lngs, lats = self._proj(xs, ys, inverse=True)
         # 2. write to database
@@ -76,7 +110,7 @@ class _CopyWriter:
             ).format(sql.Identifier(f"{table_name}_s_cars"))
             async with aconn.cursor() as cur:
                 async with cur.copy(copy_sql) as copy:
-                    for id, parent_id, dir, lng, lat, v in cars:
+                    for id, parent_id, dir, lng, lat, z, v, dir, pitch, model in cars:
                         await copy.write_row(
                             (
                                 step,
@@ -85,9 +119,9 @@ class _CopyWriter:
                                 round(dir, 3),
                                 lng,
                                 lat,
-                                "",
-                                0,
-                                0,
+                                model,
+                                round(z, 3),
+                                round(pitch, 3),
                                 round(v, 3),
                                 0,
                             )
@@ -98,7 +132,7 @@ class _CopyWriter:
             ).format(sql.Identifier(f"{table_name}_s_people"))
             async with aconn.cursor() as cur:
                 async with cur.copy(copy_sql) as copy:
-                    for id, parent_id, dir, lng, lat, v in peds:
+                    for id, parent_id, dir, lng, lat, z, v, dir, pitch, model in peds:
                         await copy.write_row(
                             (
                                 step,
@@ -107,9 +141,9 @@ class _CopyWriter:
                                 round(dir, 3),
                                 lng,
                                 lat,
-                                0,
+                                round(z, 3),
                                 round(v, 3),
-                                "",
+                                model,
                             )
                         )
             # 3. copy to traffic light
@@ -207,6 +241,7 @@ class DBRecorder:
         output_name: str,
         total_steps: int = 86400,
         use_tqdm: bool = False,
+        max_unwaited: int = 16,
     ):
         """
         Args:
@@ -215,6 +250,7 @@ class DBRecorder:
         - mongo_map: The map of the simulation.
         - output_name: The name of the output.
         - total_steps: The total steps of the simulation.
+        - max_unwaited: The maximum number of unwaited tasks.
         """
         self.eng = eng
         self._db_url = db_url
@@ -225,9 +261,15 @@ class DBRecorder:
 
         self._init_table()
         ray.init(ignore_reinit_error=True)
-        self._writer = _CopyWriter.remote(db_url, self.eng._map.header.projection)
+        self._writer = _CopyWriter.remote(
+            db_url,
+            self.eng._map.header.projection,
+            self.eng.carid2model,
+            self.eng.pedid2model,
+        )
         self._unwaited = []
         self._use_tqdm = use_tqdm
+        self._max_unwaited = max_unwaited
 
     def __del__(self):
         self.flush()
@@ -467,6 +509,8 @@ class DBRecorder:
         roads = self.eng._e.get_output_roads()
         task = self._writer.awrite.remote(self._output_name, step, persons, tls, roads)
         self._unwaited.append(task)
+        if len(self._unwaited) > self._max_unwaited:
+            self.flush()
 
     def flush(self):
         """

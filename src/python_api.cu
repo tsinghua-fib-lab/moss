@@ -97,7 +97,9 @@ class Engine {
     bool fetch_is_forward = false;
     bool fetch_x = false;
     bool fetch_y = false;
+    bool fetch_z = false;
     bool fetch_dir = false;
+    bool fetch_pitch = false;
     bool fetch_schedule_index = false;
     bool fetch_trip_index = false;
     bool fetch_departure_time = false;
@@ -134,8 +136,12 @@ class Engine {
         fetch_x = true;
       } else if (f == "y") {
         fetch_y = true;
+      } else if (f == "z") {
+        fetch_z = true;
       } else if (f == "dir") {
         fetch_dir = true;
+      } else if (f == "pitch") {
+        fetch_pitch = true;
       } else if (f == "schedule_index") {
         fetch_schedule_index = true;
       } else if (f == "trip_index") {
@@ -168,7 +174,9 @@ class Engine {
     auto* is_forwards = new vec<int8_t>();
     auto* xs = new vec<float>();
     auto* ys = new vec<float>();
+    auto* zs = new vec<float>();
     auto* dirs = new vec<float>();
+    auto* pitches = new vec<float>();
     auto* schedule_indexs = new vec<int>();
     auto* trip_indexs = new vec<int>();
     auto* departure_times = new vec<float>();
@@ -222,8 +230,14 @@ class Engine {
     if (fetch_y) {
       S.person.s_y.Save(*ys);
     }
+    if (fetch_z) {
+      S.person.s_z.Save(*zs);
+    }
     if (fetch_dir) {
       S.person.s_dir.Save(*dirs);
+    }
+    if (fetch_pitch) {
+      S.person.s_pitch.Save(*pitches);
     }
     if (fetch_schedule_index) {
       S.person.s_schedule_index.Save(*schedule_indexs);
@@ -246,9 +260,10 @@ class Engine {
         asarray(lane_parent_ids), asarray(ss), asarray(aoi_ids), asarray(vs),
         asarray(shadow_lane_ids), asarray(shadow_ss), asarray(lc_yaws),
         asarray(lc_completed_ratios), asarray(is_forwards), asarray(xs),
-        asarray(ys), asarray(dirs), asarray(schedule_indexs),
-        asarray(trip_indexs), asarray(departure_times),
-        asarray(traveling_times), asarray(total_distances));
+        asarray(ys), asarray(zs), asarray(dirs), asarray(pitches),
+        asarray(schedule_indexs), asarray(trip_indexs),
+        asarray(departure_times), asarray(traveling_times),
+        asarray(total_distances));
   }
 
   auto fetch_lanes() {
@@ -404,10 +419,10 @@ class Engine {
   }
 
   // 获取用于输出的人的信息
-  // get person information for output ([(id, status, parent_id, x, y, dir),
+  // get person information for output ([(id, status, parent_id, z, v, dir, pitch),
   // ...], [x, ...], [y, ...])
   auto get_output_persons() {
-    vec<std::tuple<int, int, int, float, float>> out;
+    vec<std::tuple<int, int, int, float, float, float, float>> out;
     auto xs = new vec<float>;
     auto ys = new vec<float>;
     out.reserve(S.person.persons.size);
@@ -420,7 +435,7 @@ class Engine {
             S.config.y_min <= p.runtime.y && p.runtime.y <= S.config.y_max) {
           out.emplace_back(p.id, int(p.runtime.status),
                            p.runtime.lane ? p.runtime.lane->id : unsigned(-1),
-                           p.runtime.dir, p.runtime.v);
+                           p.runtime.z, p.runtime.v, p.runtime.dir, p.runtime.pitch);
           xs->push_back(p.runtime.x);
           ys->push_back(p.runtime.y);
         }

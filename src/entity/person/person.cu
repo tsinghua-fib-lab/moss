@@ -19,13 +19,15 @@ namespace moss {
 __device__ void PersonState::UpdatePositionDir() {
   switch (status) {
     case PersonStatus::DRIVING: {
-      lane->GetPositionDir(s, x, y, dir);
+      lane->GetPositionDir(s, x, y, z, dir, pitch);
       if (shadow_lane) {
-        float shadow_x, shadow_y, shadow_dir;
-        shadow_lane->GetPositionDir(shadow_s, shadow_x, shadow_y, shadow_dir);
+        float shadow_x, shadow_y, shadow_z, shadow_dir, shadow_pitch;
+        shadow_lane->GetPositionDir(shadow_s, shadow_x, shadow_y, shadow_z, shadow_dir, shadow_pitch);
         x = shadow_x * (1 - lc_completed_ratio) + x * lc_completed_ratio;
         y = shadow_y * (1 - lc_completed_ratio) + y * lc_completed_ratio;
+        z = shadow_z * (1 - lc_completed_ratio) + z * lc_completed_ratio;
         dir = shadow_dir;
+        pitch = shadow_pitch;
         if (lane == shadow_lane->side_lanes[LEFT]) {
           dir += lc_yaw;
         } else if (lane == shadow_lane->side_lanes[RIGHT]) {
@@ -38,7 +40,7 @@ __device__ void PersonState::UpdatePositionDir() {
       }
     } break;
     case PersonStatus::WALKING: {
-      lane->GetPositionDir(s, x, y, dir);
+      lane->GetPositionDir(s, x, y, z, dir, pitch);
       if (!is_forward) {
         dir += PI;
       }
@@ -204,8 +206,8 @@ __global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
                        int* s_aoi_id, float* s_v, int* s_shadow_lane_id,
                        float* s_shadow_s, float* s_lc_yaw,
                        float* s_lc_completed_ratio, int8_t* s_is_forward,
-                       float* s_x, float* s_y, float* s_dir,
-                       int* s_schedule_index, int* s_trip_index,
+                       float* s_x, float* s_y, float* s_z, float* s_dir,
+                       float* s_pitch, int* s_schedule_index, int* s_trip_index,
                        float* s_departure_time, float* s_traveling_time,
                        float* s_total_distance, uint size, float t, float dt,
                        float X_MIN, float X_MAX, float Y_MIN, float Y_MAX) {
@@ -268,7 +270,7 @@ __global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
               start_s = ProjectFromLane(p.runtime.lane, start_lane, start_s);
             }
             assert(start_lane);
-            assert(start_s >= 0);
+            start_s = Clamp(start_s, 0.f, start_lane->length);
             p.runtime = {.status = PersonStatus::DRIVING,
                          .lane = start_lane,
                          .s = start_s};
@@ -296,7 +298,7 @@ __global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
               start_s = ProjectFromLane(p.runtime.lane, start_lane, start_s);
             }
             assert(start_lane);
-            assert(start_s >= 0);
+            start_s = Clamp(start_s, 0.f, start_lane->length);
             p.runtime = {.status = PersonStatus::WALKING,
                          .lane = start_lane,
                          .s = start_s};
@@ -343,7 +345,9 @@ __global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
   s_is_forward[index] = int8_t(p.runtime.is_forward);
   s_x[index] = p.runtime.x;
   s_y[index] = p.runtime.y;
+  s_z[index] = p.runtime.z;
   s_dir[index] = p.runtime.dir;
+  s_pitch[index] = p.runtime.pitch;
   s_schedule_index[index] = p.schedule_index;
   s_trip_index[index] = p.trip_index;
   s_departure_time[index] = p.departure_time;
@@ -664,7 +668,9 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
   s_is_forward.New(S->mem, persons.size);
   s_x.New(S->mem, persons.size);
   s_y.New(S->mem, persons.size);
+  s_z.New(S->mem, persons.size);
   s_dir.New(S->mem, persons.size);
+  s_pitch.New(S->mem, persons.size);
   s_schedule_index.New(S->mem, persons.size);
   s_trip_index.New(S->mem, persons.size);
   s_departure_time.New(S->mem, persons.size);
@@ -696,7 +702,7 @@ void Data::UpdateAsync() {
       s_lane_parent_id.data, s_s.data, s_aoi_id.data, s_v.data,
       s_shadow_lane_id.data, s_shadow_s.data, s_lc_yaw.data,
       s_lc_completed_ratio.data, s_is_forward.data, s_x.data, s_y.data,
-      s_dir.data, s_schedule_index.data, s_trip_index.data,
+      s_z.data, s_dir.data, s_pitch.data, s_schedule_index.data, s_trip_index.data,
       s_departure_time.data, s_traveling_time.data, s_total_distance.data,
       persons.size, S->time, S->config.step_interval, S->config.x_min,
       S->config.x_max, S->config.y_min, S->config.y_max);

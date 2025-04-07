@@ -60,7 +60,7 @@ struct Lane {
   // accumulated length of each line segment
   MArr<float> line_lengths;
   // direction of each line segment
-  MArr<float> line_directions;
+  MArr<PolylineDirection> line_directions;
   // lane connections
   MArr<LaneConnection> predecessors, successors;
   // the first predecessor and successor (only for junction lane)
@@ -85,9 +85,10 @@ struct Lane {
   float v_avg;
 
   __device__ bool IsNoEntry();
-  __host__ __device__ void GetPosition(float s, float& x, float& y);
-  __device__ void GetPositionDir(float s, float& x, float& y, float& dir);
-  std::tuple<double, double, double> GetPositionDir(float s);
+  __host__ __device__ void GetPosition2D(float s, float& x, float& y);
+  __host__ __device__ void GetPosition(float s, float& x, float& y, float& z);
+  __device__ void GetPositionDir(float s, float& x, float& y, float& z, float& dir, float& pitch);
+  std::tuple<double, double, double, double, double> GetPositionDir(float s);
 };
 
 // 同一道路上两个车道间按照等比例方式进行投影

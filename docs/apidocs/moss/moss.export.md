@@ -76,7 +76,7 @@ Bases: {py:obj}`io.TextIOBase`
 
 `````
 
-`````{py:class} _CopyWriter(dsn: str, proj_str: str)
+`````{py:class} _CopyWriter(dsn: str, proj_str: str, carid2model: typing.Dict[int, str], pedid2model: typing.Dict[int, str])
 :canonical: moss.export._CopyWriter
 
 ```{autodoc2-docstring} moss.export._CopyWriter
@@ -99,7 +99,7 @@ Bases: {py:obj}`io.TextIOBase`
 
 `````
 
-`````{py:class} DBRecorder(eng: moss.engine.Engine, db_url: str, mongo_map: str, output_name: str, total_steps: int = 86400, use_tqdm: bool = False)
+`````{py:class} DBRecorder(eng: moss.engine.Engine, db_url: str, mongo_map: str, output_name: str, total_steps: int = 86400, use_tqdm: bool = False, max_unwaited: int = 16)
 :canonical: moss.export.DBRecorder
 
 ```{autodoc2-docstring} moss.export.DBRecorder

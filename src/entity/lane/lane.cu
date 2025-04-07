@@ -15,7 +15,7 @@ __device__ bool Lane::IsNoEntry() {
   return !parent_is_road && light_state != LightState::LIGHT_STATE_GREEN;
 }
 
-__host__ __device__ void Lane::GetPosition(float s, float& x, float& y) {
+__host__ __device__ void Lane::GetPosition2D(float s, float& x, float& y) {
   uint i = Clamp<uint>(Search(line_lengths.data, line_lengths.size, s), 1,
                        line_lengths.size - 1);
   auto &p1 = line[i - 1], p2 = line[i];
@@ -24,23 +24,35 @@ __host__ __device__ void Lane::GetPosition(float s, float& x, float& y) {
   y = p1.y * (1 - k) + p2.y * k;
 }
 
-__device__ void Lane::GetPositionDir(float s, float& x, float& y, float& dir) {
+__host__ __device__ void Lane::GetPosition(float s, float& x, float& y, float& z) {
   uint i = Clamp<uint>(Search(line_lengths.data, line_lengths.size, s), 1,
                        line_lengths.size - 1);
   auto &p1 = line[i - 1], p2 = line[i];
   float k = (s - line_lengths[i - 1]) / (line_lengths[i] - line_lengths[i - 1]);
   x = p1.x * (1 - k) + p2.x * k;
   y = p1.y * (1 - k) + p2.y * k;
-  dir = line_directions[i - 1];
+  z = p1.z * (1 - k) + p2.z * k;
 }
 
-std::tuple<double, double, double> Lane::GetPositionDir(float s) {
+__device__ void Lane::GetPositionDir(float s, float& x, float& y, float& z, float& dir, float& pitch) {
+  uint i = Clamp<uint>(Search(line_lengths.data, line_lengths.size, s), 1,
+                       line_lengths.size - 1);
+  auto &p1 = line[i - 1], p2 = line[i];
+  float k = (s - line_lengths[i - 1]) / (line_lengths[i] - line_lengths[i - 1]);
+  x = p1.x * (1 - k) + p2.x * k;
+  y = p1.y * (1 - k) + p2.y * k;
+  z = p1.z * (1 - k) + p2.z * k;
+  dir = line_directions[i - 1].dir;
+  pitch = line_directions[i - 1].pitch;
+}
+
+std::tuple<double, double, double, double, double> Lane::GetPositionDir(float s) {
   uint i = Clamp<uint>(Search(line_lengths.data, line_lengths.size, s), 1,
                        line_lengths.size - 1);
   auto &p1 = line[i - 1], p2 = line[i];
   float k = (s - line_lengths[i - 1]) / (line_lengths[i] - line_lengths[i - 1]);
   return {p1.x * (1 - k) + p2.x * k, p1.y * (1 - k) + p2.y * k,
-          line_directions[i - 1]};
+          p1.z * (1 - k) + p2.z * k, line_directions[i - 1].dir, line_directions[i - 1].pitch};
 }
 
 // 同一道路上两个车道间按照等比例方式进行投影
@@ -442,12 +454,17 @@ void Data::Init(Moss* S, const PbMap& map) {
         auto& p = l.line[index++];
         p.x = i.x();
         p.y = i.y();
+        if (i.has_z()) {
+          p.z = i.z();
+        } else {
+          p.z = 0;
+        }
       }
     }
-    GetPolylineLengths(l.line_lengths.data, l.line.data, l.line.size);
+    GetPolylineLengths2D(l.line_lengths.data, l.line.data, l.line.size);
     GetPolylineDirections(l.line_directions.data, l.line.data, l.line.size);
     l.length = l.line_lengths.back();
-    l.GetPosition(l.length / 2, l.center_x, l.center_y);
+    l.GetPosition2D(l.length / 2, l.center_x, l.center_y);
     // init count
     l.veh_cnt = 0;
     l.ped_cnt = 0;

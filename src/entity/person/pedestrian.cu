@@ -28,6 +28,7 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
   } else {
     s -= ds;
   }
+  auto old_route_index = p.route_index;
   // for loop to update s, person position, route_index until s is in the range
   while (true) {
     // printf("Ped %d ShouldNext %d\n", p.id, s < 0 || s > seg.lane->length);
@@ -40,6 +41,7 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
       // printf("Ped %d Next %d\n", p.id, p.route_index + 1);
       if (segments[p.route_index + 1].lane->IsNoEntry()) {
         // do nothing, just return
+        p.route_index = old_route_index;
         p.runtime.v = 0;
         return false;
       }
@@ -81,11 +83,12 @@ __device__ bool UpdatePedestrian(Person& p, float t, float dt) {
         .v = 0,
     };
     if (p.runtime.lane) {
-      p.runtime.lane->GetPosition(p.runtime.s, p.runtime.x, p.runtime.y);
+      p.runtime.lane->GetPosition(p.runtime.s, p.runtime.x, p.runtime.y, p.runtime.z);
     } else {
       assert(p.runtime.aoi);
       p.runtime.x = p.runtime.aoi->x;
       p.runtime.y = p.runtime.aoi->y;
+      p.runtime.z = 0;
     }
     // delete the person from the current lane
     p.snapshot.lane->ped_remove_buffer.Add(&p.node.remove_node);

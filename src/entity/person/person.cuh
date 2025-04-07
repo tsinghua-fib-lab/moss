@@ -145,7 +145,7 @@ struct PersonState {
   bool is_forward;
 
   // coordinate (for output)
-  float x, y, dir;
+  float x, y, z, dir, pitch;
 
   __device__ void UpdatePositionDir();
   __device__ __inline__ bool InShadowLane() const {
@@ -340,7 +340,9 @@ struct Data {
   MArr<int8_t> s_is_forward;
   MArr<float> s_x;
   MArr<float> s_y;
+  MArr<float> s_z;
   MArr<float> s_dir;
+  MArr<float> s_pitch;
   MArr<int> s_schedule_index;
   MArr<int> s_trip_index;
   MArr<float> s_departure_time;

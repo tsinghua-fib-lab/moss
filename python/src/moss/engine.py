@@ -248,6 +248,21 @@ class Engine:
         with open(person_file, "rb") as f:
             self._persons.ParseFromString(f.read())
         self.id2persons = {person.id: person for person in self._persons.persons}
+        self.carid2model = {}
+        self.pedid2model = {}
+        for person in self._persons.persons:
+            if person.HasField(
+                "vehicle_attribute"
+            ) and person.vehicle_attribute.HasField("model"):
+                self.carid2model[person.id] = person.vehicle_attribute.model
+            else:
+                self.carid2model[person.id] = ""
+            if person.HasField(
+                "pedestrian_attribute"
+            ) and person.pedestrian_attribute.HasField("model"):
+                self.pedid2model[person.id] = person.pedestrian_attribute.model
+            else:
+                self.pedid2model[person.id] = ""
         # use map bbox as default if is set to inf
         if out_xmin == -1e999:
             out_xmin = self._map.header.west
