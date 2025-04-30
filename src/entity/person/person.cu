@@ -22,7 +22,8 @@ __device__ void PersonState::UpdatePositionDir() {
       lane->GetPositionDir(s, x, y, z, dir, pitch);
       if (shadow_lane) {
         float shadow_x, shadow_y, shadow_z, shadow_dir, shadow_pitch;
-        shadow_lane->GetPositionDir(shadow_s, shadow_x, shadow_y, shadow_z, shadow_dir, shadow_pitch);
+        shadow_lane->GetPositionDir(shadow_s, shadow_x, shadow_y, shadow_z,
+                                    shadow_dir, shadow_pitch);
         x = shadow_x * (1 - lc_completed_ratio) + x * lc_completed_ratio;
         y = shadow_y * (1 - lc_completed_ratio) + y * lc_completed_ratio;
         z = shadow_z * (1 - lc_completed_ratio) + z * lc_completed_ratio;
@@ -209,7 +210,8 @@ __global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
                        float* s_x, float* s_y, float* s_z, float* s_dir,
                        float* s_pitch, int* s_schedule_index, int* s_trip_index,
                        float* s_departure_time, float* s_traveling_time,
-                       float* s_total_distance, uint size, float t, float dt,
+                       float* s_total_distance, float* s_cum_co2,
+                       float* s_cum_energy, uint size, float t, float dt,
                        float X_MIN, float X_MAX, float Y_MIN, float Y_MAX) {
   uint index = THREAD_ID;
   if (index >= size) {
@@ -353,9 +355,23 @@ __global__ void Update(Person* persons, int8_t* s_enable, int* s_status,
   s_departure_time[index] = p.departure_time;
   s_traveling_time[index] = p.traveling_time;
   s_total_distance[index] = p.total_distance;
+  s_cum_co2[index] = p.runtime.cum_co2;
+  s_cum_energy[index] = p.runtime.cum_energy;
 }
 
 void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
+  // create default emission attribute
+  PbEmissionAttribute DEFAULT_EMISSION_ATTRIBUTE;
+  DEFAULT_EMISSION_ATTRIBUTE.set_weight(2100);
+  DEFAULT_EMISSION_ATTRIBUTE.set_coefficient_drag(0.251);
+  DEFAULT_EMISSION_ATTRIBUTE.set_lambda_s(0.29);
+  DEFAULT_EMISSION_ATTRIBUTE.set_frontal_area(2.52);
+  DEFAULT_EMISSION_ATTRIBUTE.set_type(
+      VehicleEngineType::VEHICLE_ENGINE_TYPE_FUEL);
+  DEFAULT_EMISSION_ATTRIBUTE.mutable_fuel_efficiency()
+      ->set_energy_conversion_efficiency(0.27 * 0.049);
+  DEFAULT_EMISSION_ATTRIBUTE.mutable_fuel_efficiency()->set_c_ef(86);
+
   // step 0: for-loop all persons and find persons with supported schedules
   std::vector<city::person::v2::Person> pb_valid_persons;
   for (auto& p : pb.persons()) {
@@ -487,6 +503,53 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
       throw std::runtime_error("Error: person " + std::to_string(p.id) +
                                " has no pedestrian attribute");
     }
+    const PbEmissionAttribute& emission_attr =
+        (veh_attr.has_emission_attribute() ? veh_attr.emission_attribute()
+                                           : DEFAULT_EMISSION_ATTRIBUTE);
+    p.veh_attr.weight = emission_attr.weight();
+    if (p.veh_attr.weight < 0) {
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive weight " +
+                               std::to_string(p.veh_attr.weight));
+    }
+    p.veh_attr.coefficient_drag = emission_attr.coefficient_drag();
+    if (p.veh_attr.coefficient_drag < 0) {
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive coefficient drag " +
+                               std::to_string(p.veh_attr.coefficient_drag));
+    }
+    p.veh_attr.lambda_s = emission_attr.lambda_s();
+    if (p.veh_attr.lambda_s < 0) {
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive lambda_s " +
+                               std::to_string(p.veh_attr.lambda_s));
+    }
+    p.veh_attr.frontal_area = emission_attr.frontal_area();
+    if (p.veh_attr.frontal_area < 0) {
+      throw std::runtime_error("Error: person " + std::to_string(p.id) +
+                               " has non-positive frontal area " +
+                               std::to_string(p.veh_attr.frontal_area));
+    }
+    p.veh_attr.energy_type = emission_attr.type();
+    if (emission_attr.has_fuel_efficiency()) {
+      p.veh_attr.fuel_energy_conversion_efficiency =
+          emission_attr.fuel_efficiency().energy_conversion_efficiency();
+      p.veh_attr.fuel_co2_conversion_factor =
+          emission_attr.fuel_efficiency().c_ef();
+    } else {
+      p.veh_attr.fuel_energy_conversion_efficiency = 0;
+      p.veh_attr.fuel_co2_conversion_factor = 0;
+    }
+    if (emission_attr.has_electric_efficiency()) {
+      p.veh_attr.electric_energy_conversion_efficiency =
+          emission_attr.electric_efficiency().energy_conversion_efficiency();
+      p.veh_attr.electric_co2_conversion_factor =
+          emission_attr.electric_efficiency().c_ef();
+    } else {
+      p.veh_attr.electric_energy_conversion_efficiency = 0;
+      p.veh_attr.electric_co2_conversion_factor = 0;
+    }
+
     auto& ped_attr = pb.pedestrian_attribute();
     p.ped_attr.v = ped_attr.speed();
     p.rng.SetSeed(S->seed++);
@@ -676,6 +739,8 @@ void Data::Init(Moss* S, const PbPersons& pb, uint person_limit) {
   s_departure_time.New(S->mem, persons.size);
   s_traveling_time.New(S->mem, persons.size);
   s_total_distance.New(S->mem, persons.size);
+  s_cum_co2.New(S->mem, persons.size);
+  s_cum_energy.New(S->mem, persons.size);
 
   outputs.New(S->mem, persons.size);
 }
@@ -702,10 +767,11 @@ void Data::UpdateAsync() {
       s_lane_parent_id.data, s_s.data, s_aoi_id.data, s_v.data,
       s_shadow_lane_id.data, s_shadow_s.data, s_lc_yaw.data,
       s_lc_completed_ratio.data, s_is_forward.data, s_x.data, s_y.data,
-      s_z.data, s_dir.data, s_pitch.data, s_schedule_index.data, s_trip_index.data,
-      s_departure_time.data, s_traveling_time.data, s_total_distance.data,
-      persons.size, S->time, S->config.step_interval, S->config.x_min,
-      S->config.x_max, S->config.y_min, S->config.y_max);
+      s_z.data, s_dir.data, s_pitch.data, s_schedule_index.data,
+      s_trip_index.data, s_departure_time.data, s_traveling_time.data,
+      s_total_distance.data, s_cum_co2.data, s_cum_energy.data, persons.size,
+      S->time, S->config.step_interval, S->config.x_min, S->config.x_max,
+      S->config.y_min, S->config.y_max);
 }
 
 }  // namespace person

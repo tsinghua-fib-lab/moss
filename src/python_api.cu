@@ -105,6 +105,8 @@ class Engine {
     bool fetch_departure_time = false;
     bool fetch_traveling_time = false;
     bool fetch_total_distance = false;
+    bool fetch_cum_co2 = false;
+    bool fetch_cum_energy = false;
     for (auto& f : fields) {
       if (f == "id") {
         fetch_id = true;
@@ -152,6 +154,10 @@ class Engine {
         fetch_traveling_time = true;
       } else if (f == "total_distance") {
         fetch_total_distance = true;
+      } else if (f == "cum_co2") {
+        fetch_cum_co2 = true;
+      } else if (f == "cum_energy") {
+        fetch_cum_energy = true;
       } else {
         throw std::invalid_argument("Invalid field name: " + f);
       }
@@ -182,6 +188,8 @@ class Engine {
     auto* departure_times = new vec<float>();
     auto* traveling_times = new vec<float>();
     auto* total_distances = new vec<float>();
+    auto* cum_co2s = new vec<float>();
+    auto* cum_energies = new vec<float>();
     Info("Call fetch_persons: reserve space");
 
     // copy from column storage in cuda
@@ -254,6 +262,12 @@ class Engine {
     if (fetch_total_distance) {
       S.person.s_total_distance.Save(*total_distances);
     }
+    if (fetch_cum_co2) {
+      S.person.s_cum_co2.Save(*cum_co2s);
+    }
+    if (fetch_cum_energy) {
+      S.person.s_cum_energy.Save(*cum_energies);
+    }
 
     return std::make_tuple(
         asarray(ids), asarray(enable), asarray(statuses), asarray(lane_ids),
@@ -263,7 +277,7 @@ class Engine {
         asarray(ys), asarray(zs), asarray(dirs), asarray(pitches),
         asarray(schedule_indexs), asarray(trip_indexs),
         asarray(departure_times), asarray(traveling_times),
-        asarray(total_distances));
+        asarray(total_distances), asarray(cum_co2s), asarray(cum_energies));
   }
 
   auto fetch_lanes() {

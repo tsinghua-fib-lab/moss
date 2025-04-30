@@ -24,6 +24,8 @@ using LightState = city::map::v2::LightState;
 using PbPersons = city::person::v2::Persons;
 using PbSchedule = city::trip::v2::Schedule;
 using TripMode = city::trip::v2::TripMode;
+using VehicleEngineType = city::person::v2::VehicleEngineType;
+using PbEmissionAttribute = city::person:: v2::EmissionAttribute;
 
 // routing protobuf datatype
 using PbGetRouteRequest = city::routing::v2::GetRouteRequest;

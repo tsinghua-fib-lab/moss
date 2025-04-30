@@ -128,8 +128,7 @@ __host__ __device__ Lane* Person::FindNextJunctionLane(Lane* road_lane,
   return next_lane;
 }
 
-__host__ void Person::SetVehicleRoute(Moss* S,
-                                      const std::vector<uint>& route) {
+__host__ void Person::SetVehicleRoute(Moss* S, const std::vector<uint>& route) {
   // 1. check the person is at DRIVING state
   if (runtime.status != PersonStatus::DRIVING) {
     printf(RED("[Error] Person[%d] is not at DRIVING state\n"), id);
@@ -197,6 +196,19 @@ const float LC_LENGTH_FACTOR = 3;
 // the threshold of the deviation of the acceleration that makes the back
 // vehicle brake
 const float LC_SAFE_BRAKING_BIAS = 1;
+
+// 重力加速度
+// gravity acceleration
+const float G = 9.8;
+// 轮胎转动的动能增量系数
+// the coefficient of the kinetic energy increment of the tire
+const float C_I = 1.05;
+// 滚动摩擦系数
+// rolling friction coefficient
+const float C_R = 0.01;
+// 空气密度
+// air density
+const float RHO = 1.205;
 
 // compute the phi (front wheel steering angle) of the vehicle when changing
 // lane
@@ -723,6 +735,31 @@ __device__ void RefreshRuntime(Person& p, float dt, float* out_ds,
       p.runtime.lc_yaw = yaw;
     }
   }
+
+  // after refreshing runtime, update emission
+  auto acc = max(p.acc, 0.0f);
+  auto u_acc = C_I * p.veh_attr.weight * acc * d / 1e6;
+  auto u_roll = C_R * p.veh_attr.weight * G * d * p.veh_attr.lambda_s / 1e6;
+  auto u_air =
+      0.5 * RHO * p.veh_attr.frontal_area * p.runtime.v * p.runtime.v * d / 1e6;
+  auto u_total = u_acc + u_roll + u_air;
+  float co2 = 0;
+  switch (p.veh_attr.energy_type) {
+    case VehicleEngineType::VEHICLE_ENGINE_TYPE_FUEL:
+      co2 = u_total * p.veh_attr.fuel_energy_conversion_efficiency *
+            p.veh_attr.fuel_co2_conversion_factor;
+      break;
+    case VehicleEngineType::VEHICLE_ENGINE_TYPE_ELECTRIC:
+      co2 = u_total * p.veh_attr.electric_energy_conversion_efficiency *
+            p.veh_attr.electric_co2_conversion_factor;
+      break;
+    default:
+      printf(RED("[Error] vehicle: invalid energy type, id = %d, type = %d\n"),
+             p.id, p.veh_attr.energy_type);
+      assert(false);
+  }
+  p.runtime.cum_energy += u_total;
+  p.runtime.cum_co2 += co2;
 
   *out_ds = ds;
   *out_skip_to_end = skip_to_end;

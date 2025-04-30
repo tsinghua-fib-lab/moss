@@ -363,7 +363,7 @@ class Engine:
         Fetch the persons' information.
 
         Args:
-        - fields: The fields to fetch, should be a subset of ["id", "enable", "status", "lane_id", "lane_parent_id", "s", "aoi_id", "v", "shadow_lane_id", "shadow_s", "lc_yaw", "lc_completed_ratio", "is_forward", "x", "y", "dir", "schedule_index", "trip_index", "departure_time", "traveling_time", "total_distance"]. If empty, fetch all fields.
+        - fields: The fields to fetch, should be a subset of ["id", "enable", "status", "lane_id", "lane_parent_id", "s", "aoi_id", "v", "shadow_lane_id", "shadow_s", "lc_yaw", "lc_completed_ratio", "is_forward", "x", "y", "z", "dir", "pitch", "schedule_index", "trip_index", "departure_time", "traveling_time", "total_distance", "cum_co2", "cum_energy"]. If empty, fetch all fields.
 
         The result values is a dictionary with the following keys:
         - id: The id of the person
@@ -381,12 +381,16 @@ class Engine:
         - is_forward: Whether the person is moving forward
         - x: The x coordinate of the person
         - y: The y coordinate of the person
+        - z: The z coordinate of the person
         - dir: The direction of the person
+        - pitch: The pitch of the person
         - schedule_index: The index of the schedule
         - trip_index: The index of the trip
         - departure_time: The departure time of the person
         - traveling_time: The traveling time of the person
         - total_distance: The total distance of the person
+        - cum_co2: The cumulative CO2 of the person
+        - cum_energy: The cumulative energy of the person
 
         We strongly recommend using `pd.DataFrame(e.fetch_persons())` to convert the result to a DataFrame for better visualization and analysis.
         """
@@ -407,12 +411,16 @@ class Engine:
                 "is_forward",
                 "x",
                 "y",
+                "z",
                 "dir",
+                "pitch",
                 "schedule_index",
                 "trip_index",
                 "departure_time",
                 "traveling_time",
                 "total_distance",
+                "cum_co2",
+                "cum_energy",
             ]
         has_fields = (
             set()
@@ -437,12 +445,16 @@ class Engine:
                 is_forwards,
                 xs,
                 ys,
+                zs,
                 dirs,
+                pitches,
                 schedule_indexs,
                 trip_indexs,
                 departure_times,
                 traveling_times,
                 total_distances,
+                cum_co2s,
+                cum_energies,
             ) = self._e.fetch_persons(list(delta_fields))
             new_fetch = {
                 "id": ids,
@@ -460,12 +472,16 @@ class Engine:
                 "is_forward": is_forwards,
                 "x": xs,
                 "y": ys,
+                "z": zs,
                 "dir": dirs,
+                "pitch": pitches,
                 "schedule_index": schedule_indexs,
                 "trip_index": trip_indexs,
                 "departure_time": departure_times,
                 "traveling_time": traveling_times,
                 "total_distance": total_distances,
+                "cum_co2": cum_co2s,
+                "cum_energy": cum_energies,
             }
             # add new fields to the fetched persons
             if self._fetched_persons is None:

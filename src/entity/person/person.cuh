@@ -93,6 +93,28 @@ struct VehicleAttr {
   float headway;
   // The deviation of the vehicle's recognition of lane max speed
   float lane_max_v_deviation;
+
+  // carbon emission attribute
+
+  // weight (kg)
+  float weight;
+  // coefficient of drag
+  float coefficient_drag;
+  // Pavement friction coefficient
+  float lambda_s;
+  // frontal area (m^2)
+  float frontal_area;
+  // energy type: 1 - fuel, 2 - electricity, 3 - hybrid
+  VehicleEngineType energy_type;
+  // fuel energy conversion efficiency: E_{vehicle consumed} / E_{fuel}
+  float fuel_energy_conversion_efficiency;
+  // fuel conversion factor from consumed energy (MJ) to CO2 emissions (g)
+  float fuel_co2_conversion_factor;
+  // electric energy conversion efficiency: E_{vehicle consumed} /
+  // E_{electricity}
+  float electric_energy_conversion_efficiency;
+  // electric conversion factor from consumed energy (MJ) to CO2 emissions (g)
+  float electric_co2_conversion_factor;
 };
 
 struct PedestrianAttr {
@@ -146,6 +168,13 @@ struct PersonState {
 
   // coordinate (for output)
   float x, y, z, dir, pitch;
+
+  // emission attribute
+
+  // cumulative CO2 emissions (g)
+  float cum_co2;
+  // cumulative energy consumption (MJ)
+  float cum_energy;
 
   __device__ void UpdatePositionDir();
   __device__ __inline__ bool InShadowLane() const {
@@ -348,6 +377,8 @@ struct Data {
   MArr<float> s_departure_time;
   MArr<float> s_traveling_time;
   MArr<float> s_total_distance;
+  MArr<float> s_cum_co2;
+  MArr<float> s_cum_energy;
 
   MArr<PersonOutput> outputs;
   std::map<uint, Person*> person_map;
